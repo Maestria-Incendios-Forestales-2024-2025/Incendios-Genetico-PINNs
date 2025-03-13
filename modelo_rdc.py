@@ -1,7 +1,5 @@
 import cupy as cp # type: ignore
 
-
-@cp.fuse()
 def spread_infection(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     
     """
@@ -34,8 +32,12 @@ def spread_infection(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
 
     """
 
+    S_new = S.copy()
+    I_new = I.copy()
+    R_new = R.copy()
+
     # Actualización del estado S
-    S_new = S - dt * beta * I * S
+    S_new -= dt * beta * I * S
 
     # Actualización del estado I
     I_laplacian = (cp.roll(I, 1, axis=0) + cp.roll(I, -1, axis=0) +
@@ -48,10 +50,10 @@ def spread_infection(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     I_dx = ((A*wx+B*h_dx)>0)*(I - cp.roll(I, 1, axis=1)) + ((A*wx+B*h_dx)<0)*(cp.roll(I, -1, axis=1) - I)
     I_dy = ((A*wy+B*h_dy)>0)*(I - cp.roll(I, 1, axis=0)) + ((A*wy+B*h_dy)<0)*(cp.roll(I, -1, axis=0) - I)
 
-    I_new = I + dt * (beta * I * S - gamma * I) + s * I_laplacian - dt/d * ((A*wx+B*h_dx) * I_dx + (A*wy+B*h_dy) * I_dy)
+    I_new += dt * (beta * I * S - gamma * I) + s * I_laplacian - dt/d * ((A*wx+B*h_dx) * I_dx + (A*wy+B*h_dy) * I_dy)
 
     # Actualización del estado R
-    R_new = R + dt * gamma * I
+    R_new += dt * gamma * I
 
     # Condiciones de borde de Dirichlet
     S_new[0, :] = S_new[-1, :] = S_new[:, 0] = S_new[:, -1] = 0
