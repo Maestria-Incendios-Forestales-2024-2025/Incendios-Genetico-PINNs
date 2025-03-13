@@ -1,6 +1,60 @@
 import cupy as cp # type: ignore
 
+spread_kernel = cp.ElementwiseKernel(
+    """
+    float32 S, float32 I, float32 R, float32 dt, float32 d, float32 beta, float32 gamma, 
+    float32 D, float32 wx, float32 wy, float32 h_dx, float32 h_dy, float32 A, float32 B,
+    float32 I_top, float32 I_bottom, float32 I_left, float32 I_right
+    """,
+    """
+    float32 S_new, float32 I_new, float32 R_new
+    """,
+    """
+    S_new = S - dt * beta * I * S;
+
+    float laplacian_I = (I_top + I_bottom + I_left + I_right - 4 * I);
+    float s = D * dt / (d * d);
+
+    float I_dx = ((A * wx + B * h_dx) > 0) ? (I - I_left) : (I_right - I);
+    float I_dy = ((A * wy + B * h_dy) > 0) ? (I - I_bottom) : (I_top - I);
+
+    I_new = I + dt * (beta * I * S - gamma * I) + s * laplacian_I 
+            - dt / d * ((A * wx + B * h_dx) * I_dx + (A * wy + B * h_dy) * I_dy);
+
+    R_new = R + dt * gamma * I;
+    """,
+    "spread_kernel"
+)
+
 def spread_infection(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
+    S_new = cp.empty_like(S)
+    I_new = cp.empty_like(I)
+    R_new = cp.empty_like(R)
+
+    I_top = cp.roll(I, -1, axis=0)
+    I_bottom = cp.roll(I, 1, axis=0)
+    I_left = cp.roll(I, +1, axis=1)
+    I_right = cp.roll(I, -1, axis=1)
+
+    spread_kernel(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B,
+                  I_top, I_bottom, I_left, I_right,
+                  S_new, I_new, R_new)
+
+    # Aplicar condiciones de borde (esto se hace fuera del kernel)
+    S_new[0, :] = S_new[-1, :] = S_new[:, 0] = S_new[:, -1] = 0
+    I_new[0, :] = I_new[-1, :] = I_new[:, 0] = I_new[:, -1] = 0
+    R_new[0, :] = R_new[-1, :] = R_new[:, 0] = R_new[:, -1] = 0
+
+    # Celdas no combustibles
+    no_fuel = (beta == 0)
+    S_new[no_fuel] = 1
+    I_new[no_fuel] = 0
+    R_new[no_fuel] = 0
+
+    return S_new, I_new, R_new
+
+
+'''def spread_infection(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     
     """
 
@@ -67,7 +121,7 @@ def spread_infection(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     I_new[no_fuel] = 0
     R_new[no_fuel] = 0
 
-    return S_new, I_new, R_new
+    return S_new, I_new, R_new'''
 
 
 def courant(dt, D, A, B, d, wx, wy, h_dx, h_dy):
