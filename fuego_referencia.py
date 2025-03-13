@@ -85,10 +85,10 @@ var_poblacion = 0
 
 # Inicializar arrays de cupy para almacenar los resultados
 num_steps = 1001
-pob_total = cp.zeros(num_steps)
-S_total = cp.zeros(num_steps)
-I_total = cp.zeros(num_steps)
-R_total = cp.zeros(num_steps)
+#pob_total = cp.zeros(num_steps)
+#S_total = cp.zeros(num_steps)
+#I_total = cp.zeros(num_steps)
+#R_total = cp.zeros(num_steps)
 
 start = cp.cuda.Event()
 end = cp.cuda.Event()
@@ -99,24 +99,24 @@ start.record()
 for t in range(num_steps):
     S, I, R = spread_infection(S=S, I=I, R=R, dt=dt, d=d, beta=beta_veg, gamma=gamma, D=D, wx=wx, wy=wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa, A=A, B=B)
 
-    suma_S = S.sum() / nx**2
-    suma_I = I.sum() / nx**2
-    suma_R = R.sum() / nx**2
+    #suma_S = S.sum() / nx**2
+    #suma_I = I.sum() / nx**2
+    #suma_R = R.sum() / nx**2
 
-    suma_total = suma_S + suma_I + suma_R
-    pob_total[t] = suma_total
-    S_total[t] = suma_S
-    I_total[t] = suma_I
-    R_total[t] = suma_R
+    #suma_total = suma_S + suma_I + suma_R
+    #pob_total[t] = suma_total
+    #S_total[t] = suma_S
+    #I_total[t] = suma_I
+    #R_total[t] = suma_R
 
-    var_poblacion += cp.abs(suma_total - pob_total[t-1]) if t > 0 else 0
+    #var_poblacion += cp.abs(suma_total - pob_total[t-1]) if t > 0 else 0
 
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-var_poblacion_promedio = var_poblacion / num_steps
+#var_poblacion_promedio = var_poblacion / num_steps
 
-print(f'Variación de población promedio: {var_poblacion_promedio}')
+#print(f'Variación de población promedio: {var_poblacion_promedio}')
 
 # Calcular el número de celdas quemadas
 celdas_quemadas = cp.sum(R > 0.2)
