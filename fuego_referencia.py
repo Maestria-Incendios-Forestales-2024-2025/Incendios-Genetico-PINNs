@@ -49,7 +49,8 @@ D = 50 # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 de
 beta_veg = cp.where(vegetacion <= 2, 0, 0.1 * vegetacion) # fracción de vegetación incéndiandose por hora
 
 # Hacemos una máscara donde vegetación <=2, gamma >> 1/dt. Sino, vale 0.1. 
-gamma = cp.where(vegetacion <= 2, 100, 0.1) # fracción de vegetación incéndiandose por hora.
+gamma = cp.where(vegetacion <= 2, cp.float32(100), cp.float32(0.1))
+#gamma = cp.where(vegetacion <= 2, 100, 0.1) # fracción de vegetación incéndiandose por hora.
             # 1/gamma es el tiempo promedio del incendio
 
 dt = 1/6 # Paso temporal. Si medimos el tiempo en horas, 1/6 indica un paso de 10 minutos
@@ -73,9 +74,9 @@ h_dy_mapa = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion * cp.pi / 180 -
 ############################## INCENDIO DE REFERENCIA ###############################################
 
 # Población inicial de susceptibles e infectados
-S = cp.ones((ny, nx))  # Todos son susceptibles inicialmente
-I = cp.zeros((ny, nx)) # Ningún infectado al principio
-R = cp.zeros((ny, nx))
+S = cp.ones((ny, nx), dtype=cp.float32)  # Todos son susceptibles inicialmente
+I = cp.zeros((ny, nx), dtype=cp.float32) # Ningún infectado al principio
+R = cp.zeros((ny, nx), dtype=cp.float32)
 
 # Infectados en una esquina de la grilla
 S[700, 700] = 0
@@ -95,9 +96,19 @@ end = cp.cuda.Event()
 
 start.record()
 
+# Definir arrays de estado
+S_new = cp.empty_like(S)
+I_new = cp.empty_like(I)
+R_new = cp.empty_like(R)
+
 # Iterar sobre las simulaciones
 for t in range(num_steps):
-    S, I, R = spread_infection(S=S, I=I, R=R, dt=dt, d=d, beta=beta_veg, gamma=gamma, D=D, wx=wx, wy=wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa, A=A, B=B)
+    spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta_veg, gamma, D, wx, wy, h_dx_mapa, h_dy_mapa, A, B)
+
+    # Swap de buffers (intercambiar referencias en lugar de crear nuevos arrays)
+    S, S_new = S_new, S
+    I, I_new = I_new, I
+    R, R_new = R_new, R
 
     #suma_S = S.sum() / nx**2
     #suma_I = I.sum() / nx**2

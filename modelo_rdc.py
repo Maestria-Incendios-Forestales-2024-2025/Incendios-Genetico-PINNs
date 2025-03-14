@@ -26,11 +26,7 @@ spread_kernel = cp.ElementwiseKernel(
     "spread_kernel"
 )
 
-def spread_infection(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
-    S_new = cp.empty_like(S)
-    I_new = cp.empty_like(I)
-    R_new = cp.empty_like(R)
-
+def spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     I_top = cp.roll(I, -1, axis=0)
     I_bottom = cp.roll(I, 1, axis=0)
     I_left = cp.roll(I, +1, axis=1)
@@ -50,8 +46,6 @@ def spread_infection(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     S_new[no_fuel] = 1
     I_new[no_fuel] = 0
     R_new[no_fuel] = 0
-
-    return S_new, I_new, R_new
 
 
 '''def spread_infection(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
