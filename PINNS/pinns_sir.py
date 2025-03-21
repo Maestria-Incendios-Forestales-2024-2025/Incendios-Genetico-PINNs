@@ -1,8 +1,6 @@
 import numpy as np
 import cupy as cp # type: ignore
 from modelo_rdc import spread_infection, courant
-import csv
-import argparse
 import torch # type: ignore
 import torch.nn as nn # type: ignore
 import torch.optim as optim # type: ignore
@@ -42,7 +40,7 @@ orientacion = datos[4]
 ############################## PARÁMETROS DE LOS MAPAS ###############################################
 
 # Coeficiente de difusión
-D = 50 # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
+D_I = 50 # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 d = 30 # Tamaño de cada celda
 beta_veg = cp.where(vegetacion <= 2, 0, 0.1 * vegetacion) # Parámetros del modelo SI
 gamma = cp.where(vegetacion <= 2, 100, 0.1) # Hacemos una máscara donde vegetación <=2, gamma >> 1/dt. Sino, vale 0.1. 
@@ -70,34 +68,10 @@ gamma = cupy_to_torch(gamma)
 h_dx = cupy_to_torch(h_dx_mapa)
 h_dy = cupy_to_torch(h_dy_mapa)
 
-############################## GRILLA DE ENTRENAMIENTO ###############################################
+############################## ENTRENAMIENTO DEL MODELO ###############################################
 
-# Definir dimensiones espaciales y temporales
-Ny, Nx = vientod.shape  # Resolución espacial
-T_max = 1000         # Número de pasos de tiempo
-dt = 1/6            # Paso temporal en horas
+model = train_pinn(beta, gamma, D_I, A, wx, h_dx, B, wy, h_dy, epochs=10000)
 
-# Crear grilla de entrenamiento
-t = torch.linspace(0, T_max * dt, T_max).to(device)  # Tiempo en horas
-x = torch.linspace(0, Nx, Nx).to(device)  
-y = torch.linspace(0, Ny, Ny).to(device) 
+############################## GUARDADO DEL MODELO ENTRENADO ###############################################
 
-T, X, Y = torch.meshgrid(t, x, y, indexing='ij')  # Grilla 3D en GPU
-
-# Aplanar para pasarlo a la red
-t_train = T.reshape(-1, 1)
-x_train = X.reshape(-1, 1)
-y_train = Y.reshape(-1, 1)
-
-# Concatenar en un solo tensor (entrada de la red)
-train_points = torch.cat([t_train, x_train, y_train], dim=1)
-
-############################## CONDICIONES INICIALES ###############################################
-
-# Mapas iniciales (condiciones iniciales en t=0)
-I0 = torch.zeros((Nx, Ny), device="cuda")  # Todo vacío excepto punto de ignición
-I0[700, 700] = 1.0  # Ejemplo de ignición en (500, 300)
-
-S0 = torch.ones((Nx, Ny), device="cuda") - I0  # Todo combustible menos ignición
-R0 = torch.zeros((Nx, Ny), device="cuda")  # Nada "recuperado" aún
-
+torch.save(model.state_dict(), "modelo_entrenado.pth")
