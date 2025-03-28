@@ -62,7 +62,7 @@ def train_pinn(beta, gamma, D_I, A, wx, h_dx, B, wy, h_dy, epochs=10000):
     # Normalizo (x, y) iniciales al intervalo [-1, 1]
     x_init_norm = 2 * (x_init / Nx) - 1
     y_init_norm = 2 * (y_init / Ny) - 1
-    t_init_norm = 2 * (y_init / Ny) - 1
+    t_init_norm = 2 * (t_init / Ny) - 1
 
     # Agregar el punto de ignición manualmente
     x_ignition = torch.tensor([[700.0]], device=device)
