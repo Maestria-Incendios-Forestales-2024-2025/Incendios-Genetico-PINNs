@@ -70,7 +70,18 @@ h_dy = cupy_to_torch(h_dy_mapa)
 
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
 
+start_time = torch.cuda.Event(enable_timing=True)
+end_time = torch.cuda.Event(enable_timing=True)
+
+start_time.record()
 model = train_pinn(beta, gamma, D_I, A, wx, h_dx, B, wy, h_dy, epochs=10000)
+end_time.record()
+
+# Sincronizar para asegurar medición correcta
+torch.cuda.synchronize()
+training_time = start_time.elapsed_time(end_time) / 1000  # Convertir de ms a s
+
+print(f"Training time: {training_time:.2f} seconds")
 
 ############################## GUARDADO DEL MODELO ENTRENADO ###############################################
 
