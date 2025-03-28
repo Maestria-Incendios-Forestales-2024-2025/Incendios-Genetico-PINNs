@@ -2,7 +2,7 @@ import torch # type: ignore
 import torch.nn as nn # type: ignore
 import torch.optim as optim # type: ignore
 import cupy as cp # type: ignore
-import torch.nn.functional as F
+import torch.nn.functional as F # type: ignore
 
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -62,6 +62,7 @@ def train_pinn(beta, gamma, D_I, A, wx, h_dx, B, wy, h_dy, epochs=10000):
     # Normalizo (x, y) iniciales al intervalo [-1, 1]
     x_init_norm = 2 * (x_init / Nx) - 1
     y_init_norm = 2 * (y_init / Ny) - 1
+    t_init_norm = 2 * (y_init / Ny) - 1
 
     # Agregar el punto de ignición manualmente
     x_ignition = torch.tensor([[700.0]], device=device)
@@ -76,9 +77,9 @@ def train_pinn(beta, gamma, D_I, A, wx, h_dx, B, wy, h_dy, epochs=10000):
     y_init_norm = torch.cat([y_init_norm, y_ignition_norm], dim=0)
 
     # Mapas iniciales (condiciones iniciales en t=0)
-    S_init = torch.ones_like(x_init) # Todo combustible
-    I_init = torch.zeros_like(x_init) # Nada incendiado
-    R_init = torch.zeros_like(x_init) # Nada "recuperado" aún
+    S_init = torch.ones_like(x_init_norm) # Todo combustible
+    I_init = torch.zeros_like(x_init_norm) # Nada incendiado
+    R_init = torch.zeros_like(x_init_norm) # Nada "recuperado" aún
 
     # Asignar la ignición al último punto (el que agregamos)
     S_init[-1] = 0 # Todo combustible menos ignición
@@ -157,7 +158,7 @@ def train_pinn(beta, gamma, D_I, A, wx, h_dx, B, wy, h_dy, epochs=10000):
         loss_pde = loss_S.pow(2).mean() + loss_I.pow(2).mean() + loss_R.pow(2).mean()
 
         # Calcular salida de la red en t=0 para condición inicial
-        SIR_init_pred = model(x_init_norm, y_init_norm, t_init)
+        SIR_init_pred = model(x_init_norm, y_init_norm, t_init_norm)
         S_init_pred, I_init_pred, R_init_pred = SIR_init_pred[:, 0:1], SIR_init_pred[:, 1:2], SIR_init_pred[:, 2:3]
 
         # Pérdida por condición inicial (forzar que la red prediga bien los valores iniciales)
