@@ -1,7 +1,6 @@
 import torch # type: ignore
 import torch.nn as nn # type: ignore
 import torch.optim as optim # type: ignore
-import cupy as cp # type: ignore
 
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -35,7 +34,7 @@ class FireSpread_PINN(nn.Module):
 ############################## FUNCIÓN DE ENTRENAMIENTO ###############################################
 
 # Función para entrenar la PINN con ecuaciones de propagación de fuego
-def train_pinn(D_I, epochs_per_block=500):
+def train_pinn(D_I, epochs_adam=500, epochs_lbfgs=500):
     model = FireSpread_PINN().to(device)
     model.double()
 
@@ -87,17 +86,6 @@ def train_pinn(D_I, epochs_per_block=500):
         x_right = torch.ones(N_boundary, 1, device=device).double() # x=1768
         t_boundary = t_start + (t_end - t_start) * torch.rand(N_boundary, 1, device=device).double()
 
-        optimizer = optim.LBFGS(
-            model.parameters(),
-            lr=1.0e-1,
-            max_iter=epochs_per_block,
-            max_eval=epochs_per_block,
-            history_size=50,
-            line_search_fn='strong_wolfe',
-            tolerance_grad=1e-9,
-            tolerance_change=1e-9
-        )
-
         def closure():
             optimizer.zero_grad()
 
@@ -126,11 +114,18 @@ def train_pinn(D_I, epochs_per_block=500):
             loss.backward()
             return loss
 
-        optimizer.step(closure)
-        final_loss = closure().item()
+        # Etapa 1: Adam
+        optimizer = optim.Adam(model.parameters(), lr=1e-3)
+        for _ in range(epochs_adam):
+            loss = closure()
+            optimizer.step()
+            optimizer.zero_grad()
 
-        print(f"Bloque {block} terminado")
-        print(f"Loss final en el bloque {block}: {final_loss}")
+        # Etapa 2: LBFGS
+        optimizer = optim.LBFGS(model.parameters(), lr=1.0, max_iter=epochs_lbfgs, history_size=50, line_search_fn='strong_wolfe')
+        optimizer.step(closure)
+
+        print(f"Bloque {block + 1} terminado | Loss final: {closure().item():.6f}")
 
         t_next = torch.full_like(x_init, t_end)
         with torch.no_grad():
