@@ -21,8 +21,11 @@ class FireSpread_PINN(nn.Module):
             nn.Tanh(),
             nn.Linear(64, 64),
             nn.Tanh(),
-            nn.Linear(64, 2),
-            nn.Sigmoid()
+            nn.Linear(64, 64),
+            nn.Tanh(),
+            nn.Linear(64, 64),
+            nn.Tanh(),
+            nn.Linear(64, 2)
         )
 
     def forward(self, x, t):
@@ -32,32 +35,27 @@ class FireSpread_PINN(nn.Module):
 ############################## FUNCIÓN DE ENTRENAMIENTO ###############################################
 
 # Función para entrenar la PINN con ecuaciones de propagación de fuego
-def train_pinn(D_I, epochs_per_block=500):
+def train_pinn(D_I, epochs_adam=1000, epochs_lbfgs=20):
     model = FireSpread_PINN().to(device)
     model.double()
 
-    # Genera datos de entrenamiento
-    N_interior = 20000
-    N_boundary = 2000
-    N_initial = 2000
+    # Configuración del dominio
+    N_interior, N_boundary, N_initial = 20000, 2000, 2000
     Nx = 1768
-
-    # Punto de ignición
     x_ignition = torch.tensor([[700.0]], device=device).double() / Nx
 
-    # Condiciones iniciales
     x_init = torch.rand(N_initial - 1, 1, device=device).double()
     t_init = torch.zeros(N_initial, 1, device=device).double()
-    x_init = torch.cat([x_init, x_ignition], dim=0).double()
-    sigma_x = 1 / Nx
+    x_init = torch.cat([x_init, x_ignition], dim=0)
 
-    I_init = torch.exp(-0.5 * ((x_init - x_ignition) / sigma_x) ** 2)
+    sigma_x = 0.05
+    #normalization = torch.sqrt(torch.pi) * sigma_x * (torch.erf((1 - x_ignition) / (sigma_x * torch.sqrt(2))) - torch.erf((- x_ignition) / (sigma_x * torch.sqrt(2))))
+    I_init = torch.exp(-0.5 * ((x_init - x_ignition) / sigma_x) ** 2) #/ normalization
     S_init = 1 - I_init
 
     beta_val = 0.3
     gamma_val = 0.1
 
-    # Dominio interior
     x_interior = torch.rand(N_interior, 1, device=device).double()
     t_interior = torch.rand(N_interior, 1, device=device).double()
     x_interior.requires_grad, t_interior.requires_grad = True, True
@@ -65,24 +63,14 @@ def train_pinn(D_I, epochs_per_block=500):
     beta_sampled = torch.full((N_interior, 1), beta_val, device=device).double()
     gamma_sampled = torch.full((N_interior, 1), gamma_val, device=device).double()
 
-    # Condiciones de borde
     x_left = torch.zeros(N_boundary, 1, device=device).double()
     x_right = torch.ones(N_boundary, 1, device=device).double()
     t_boundary = torch.rand(N_boundary, 1, device=device).double()
 
-    optimizer = optim.LBFGS(
-        model.parameters(),
-        lr=1.0e-4,
-        max_iter=100000,
-        max_eval=None,
-        history_size=50,
-        tolerance_grad=1e-7,
-        tolerance_change=1e-7,
-        line_search_fn="strong_wolfe"
-    )
-
+    # --------- Cierre de optimización ---------
+    last_loss = None
     def closure():
-        optimizer.zero_grad()
+        nonlocal last_loss
 
         SIR_pred = model(x_interior, t_interior)
         S_pred, I_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2]
@@ -104,13 +92,33 @@ def train_pinn(D_I, epochs_per_block=500):
         S_right_pred, I_right_pred = model(x_right, t_boundary)[:, 0:1], model(x_right, t_boundary)[:, 1:2]
         loss_bc = (S_left_pred**2).mean() + (I_left_pred**2).mean() + (S_right_pred**2).mean() + (I_right_pred**2).mean()
 
-        loss = loss_pde + loss_ic + loss_bc
+        loss = loss_pde + 1000*loss_ic + loss_bc
         loss.backward()
-
+        last_loss = loss.item()
         return loss
 
-    optimizer.step(closure)
-    final_loss = closure().item()
-    print(f"Entrenamiento terminado | Loss final: {final_loss:.6f}")
+    # --------- Primera etapa: Adam ---------
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    for epoch in range(epochs_adam):
+        optimizer.zero_grad()
+        loss = closure()
+        optimizer.step()
+        if epoch % 100 == 0 or epoch == epochs_adam - 1:
+            print(f"[Adam] Época {epoch} | Loss: {loss.item():.6f}")
+
+    # --------- Segunda etapa: LBFGS ---------
+    optimizer = optim.LBFGS(
+        model.parameters(),
+        lr=1.0,
+        max_iter=500,
+        history_size=50,
+        tolerance_grad=1e-7,
+        tolerance_change=1e-9,
+        line_search_fn="strong_wolfe"
+    )
+
+    for epoch in range(epochs_lbfgs):
+        optimizer.step(closure)
+        print(f"[LBFGS] Época {epoch} | Loss final: {last_loss:.6f}")
 
     return model
