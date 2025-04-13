@@ -1,4 +1,5 @@
 import cupy as cp # type: ignore
+import numpy as np # type: ignore
 
 # Elementwise kernel
 spread_kernel = cp.ElementwiseKernel(
@@ -109,6 +110,38 @@ def spread_infection_cupy(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, w
     # Creamos una máscara para las celdas no combustibles
     no_fuel = (beta == 0)
 
+    S_new[no_fuel] = 1
+    I_new[no_fuel] = 0
+    R_new[no_fuel] = 0
+
+def spread_infection_numpy(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
+    
+    # Actualización del estado S
+    S_new[...] = S - dt * beta * I * S
+
+    # Actualización del estado I
+    I_laplacian = (np.roll(I, 1, axis=0) + np.roll(I, -1, axis=0) +
+                  np.roll(I, 1, axis=1) + np.roll(I, -1, axis=1) - 4 * I)
+
+    # Número de difusión
+    s = D * dt / (d * d)
+
+    # Esquema upwind para la altura
+    I_dx = ((A * wx + B * h_dx) > 0) * (I - np.roll(I, 1, axis=1)) + ((A * wx + B * h_dx) < 0) * (np.roll(I, -1, axis=1) - I)
+    I_dy = ((A * wy + B * h_dy) > 0) * (I - np.roll(I, 1, axis=0)) + ((A * wy + B * h_dy) < 0) * (np.roll(I, -1, axis=0) - I)
+
+    I_new[...] = I + dt * (beta * I * S - gamma * I) + s * I_laplacian - dt / d * ((A * wx + B * h_dx) * I_dx + (A * wy + B * h_dy) * I_dy)
+
+    # Actualización del estado R
+    R_new[...] = R + dt * gamma * I
+
+    # Condiciones de borde de Dirichlet
+    S_new[0, :] = S_new[-1, :] = S_new[:, 0] = S_new[:, -1] = 0
+    I_new[0, :] = I_new[-1, :] = I_new[:, 0] = I_new[:, -1] = 0
+    R_new[0, :] = R_new[-1, :] = R_new[:, 0] = R_new[:, -1] = 0
+
+    # Celdas no combustibles
+    no_fuel = (beta == 0)
     S_new[no_fuel] = 1
     I_new[no_fuel] = 0
     R_new[no_fuel] = 0
