@@ -1,5 +1,6 @@
 import cupy as cp # type: ignore
 
+# Elementwise kernel
 spread_kernel = cp.ElementwiseKernel(
     """
     float32 S, float32 I, float32 R, float32 dt, float32 d, float32 beta, float32 gamma, 
@@ -26,6 +27,7 @@ spread_kernel = cp.ElementwiseKernel(
     "spread_kernel"
 )
 
+# Versión hecha con elementwise kernel de cupy
 def spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     I_top = cp.roll(I, -1, axis=0)
     I_bottom = cp.roll(I, 1, axis=0)
@@ -47,8 +49,8 @@ def spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy
     I_new[no_fuel] = 0
     R_new[no_fuel] = 0
 
-
-'''def spread_infection(S, I, R, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
+# Versión hecha completamente en cupy
+def spread_infection_cupy(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     
     """
 
@@ -80,12 +82,8 @@ def spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy
 
     """
 
-    S_new = S.copy()
-    I_new = I.copy()
-    R_new = R.copy()
-
     # Actualización del estado S
-    S_new -= dt * beta * I * S
+    S_new[...] = S - dt * beta * I * S
 
     # Actualización del estado I
     I_laplacian = (cp.roll(I, 1, axis=0) + cp.roll(I, -1, axis=0) +
@@ -98,10 +96,10 @@ def spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy
     I_dx = ((A*wx+B*h_dx)>0)*(I - cp.roll(I, 1, axis=1)) + ((A*wx+B*h_dx)<0)*(cp.roll(I, -1, axis=1) - I)
     I_dy = ((A*wy+B*h_dy)>0)*(I - cp.roll(I, 1, axis=0)) + ((A*wy+B*h_dy)<0)*(cp.roll(I, -1, axis=0) - I)
 
-    I_new += dt * (beta * I * S - gamma * I) + s * I_laplacian - dt/d * ((A*wx+B*h_dx) * I_dx + (A*wy+B*h_dy) * I_dy)
+    I_new[...] = I + dt * (beta * I * S - gamma * I) + s * I_laplacian - dt/d * ((A*wx+B*h_dx) * I_dx + (A*wy+B*h_dy) * I_dy)
 
     # Actualización del estado R
-    R_new += dt * gamma * I
+    R_new[...] = R + dt * gamma * I
 
     # Condiciones de borde de Dirichlet
     S_new[0, :] = S_new[-1, :] = S_new[:, 0] = S_new[:, -1] = 0
@@ -114,8 +112,6 @@ def spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy
     S_new[no_fuel] = 1
     I_new[no_fuel] = 0
     R_new[no_fuel] = 0
-
-    return S_new, I_new, R_new'''
 
 
 def courant(dt, D, A, B, d, wx, wy, h_dx, h_dy):
