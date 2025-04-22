@@ -8,10 +8,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 ############################## PARÁMETROS DE LOS MAPAS ###############################################
-d = 30
-Nx = 1768
+
 # Coeficiente de difusión
-D_I = 1 
+D_I = 0.05 
 
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
 
@@ -19,7 +18,7 @@ start_time = torch.cuda.Event(enable_timing=True)
 end_time = torch.cuda.Event(enable_timing=True)
 
 start_time.record()
-model = train_pinn(D_I, epochs_per_block=1000)
+model = train_pinn(D_I)
 end_time.record()
 
 # Sincronizar para asegurar medición correcta
