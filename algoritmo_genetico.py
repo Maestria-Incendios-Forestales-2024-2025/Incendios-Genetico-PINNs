@@ -106,10 +106,21 @@ def aptitud(D, A, B, x, y):
     S_i[x.astype(cp.int32), y.astype(cp.int32)] = 0
     I_i[x.astype(cp.int32), y.astype(cp.int32)] = 1
 
+    S_new_i = cp.empty_like(S_i)
+    I_new_i = cp.empty_like(I_i)
+    R_new_i = cp.empty_like(R_i)
+
     # Iterar sobre las simulaciones
     for t in range(num_steps):
-        S_i, I_i, R_i = spread_infection(S=S_i, I=I_i, R=R_i, dt=dt, d=d, beta=beta_veg, gamma=gamma, 
-                                         D=D, wx=wx, wy=wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa, A=A, B=B)
+        spread_infection(S=S_i, I=I_i, R=R_i, S_new=S_new_i, I_new=I_new_i, R_new=R_new_i, 
+                         dt=dt, d=d, beta=beta_veg, gamma=gamma, 
+                         D=D, wx=wx, wy=wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa, A=A, B=B)
+        
+        S_i, S_new_i = S_new_i, S_i
+        I_i, I_new_i = I_new_i, I_i
+        R_i, R_new_i = R_new_i, R_i
+
+        # Esto va a decir si la simulación explota o no
         if not (cp.all((R_i >= 0) & (R_i <= 1))):
             break
 
