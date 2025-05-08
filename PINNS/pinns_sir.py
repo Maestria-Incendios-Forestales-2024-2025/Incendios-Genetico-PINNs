@@ -8,10 +8,22 @@ print(f"Using device: {device}")
 
 ############################## PARÁMETROS DE LOS MAPAS ###############################################
 
-D_I = 0.005
-beta_val = 0.3
-gamma_val = 0.1
-epochs_adam = 10000
+# Parámetros que uso para resolver numéricamente
+# Tamaño de cada celda
+d = 30 # metros
+# Coeficiente de difusión
+D = 50 # metros^2/h
+# Paso temporal
+dt = 1/6 # horas
+
+D_I = D * dt / (d**2)
+beta_val = 0.3 * dt
+gamma_val = 0.1 * dt
+epochs_adam = 1000
+
+Nx, Ny = 1768, 1060
+mean_x, mean_y = 700 / Nx, 700 / Ny
+sigma_x, sigma_y = 10 / Nx, 10 / Ny
 
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
 
@@ -19,7 +31,7 @@ start_time = torch.cuda.Event(enable_timing=True)
 end_time = torch.cuda.Event(enable_timing=True)
 
 start_time.record()
-model, loss = train_pinn(D_I, beta_val, gamma_val, epochs_adam=epochs_adam)
+model, loss = train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=epochs_adam)
 end_time.record()
 
 # Sincronizar para asegurar medición correcta
