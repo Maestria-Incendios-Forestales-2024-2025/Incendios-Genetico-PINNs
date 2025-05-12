@@ -68,13 +68,13 @@ def train_pinn(beta_val, gamma_val, D_I, mean_x, mean_y, sigma_x, sigma_y, epoch
     R_init = torch.zeros_like(I_init)
 
     # Sampleo puntos del borde
-    # x_left = torch.zeros(N_boundary, 1, device=device) # x=0
-    # x_right = torch.ones(N_boundary, 1, device=device) # x=1
-    # y_top = torch.ones(N_boundary, 1, device=device) # y=1
-    # y_bottom = torch.zeros(N_boundary, 1, device=device) # y=0
-    # x_boundary = torch.rand(N_boundary, 1, device=device) # x en (0, 1)
-    # y_boundary = torch.rand(N_boundary, 1, device=device) # y en (0, 1)
-    # t_boundary = torch.rand(N_boundary, 1, device=device) # t en (0, 1)
+    x_left = torch.zeros(N_boundary, 1, device=device) # x=0
+    x_right = torch.ones(N_boundary, 1, device=device) # x=1
+    y_top = torch.ones(N_boundary, 1, device=device) # y=1
+    y_bottom = torch.zeros(N_boundary, 1, device=device) # y=0
+    x_boundary = torch.rand(N_boundary, 1, device=device) # x en (0, 1)
+    y_boundary = torch.rand(N_boundary, 1, device=device) # y en (0, 1)
+    t_boundary = torch.rand(N_boundary, 1, device=device) # t en (0, 1)
 
     T_final = 1.0
     t_blocks = torch.linspace(0, T_final, N_blocks + 1, device=device)
@@ -126,28 +126,34 @@ def train_pinn(beta_val, gamma_val, D_I, mean_x, mean_y, sigma_x, sigma_y, epoch
             loss_ic = (S_init_pred - S_init).pow(2).mean() + (I_init_pred - I_init).pow(2).mean() + (R_init_pred - R_init).pow(2).mean()
 
             # # Calcular salida de la red para los bordes
-            # SIR_top_pred = model(x_boundary, y_top, t_boundary) # Borde de arriba (x,y)=(x,1)
-            # S_top_pred, I_top_pred, R_top_pred = SIR_top_pred[:, 0:1], SIR_top_pred[:, 1:2], SIR_top_pred[:, 2:3]
+            SIR_top_pred = model(x_boundary, y_top, t_boundary) # Borde de arriba (x,y)=(x,1)
+            S_top_pred, I_top_pred, R_top_pred = SIR_top_pred[:, 0:1], SIR_top_pred[:, 1:2], SIR_top_pred[:, 2:3]
 
-            # SIR_bottom_pred = model(x_boundary, y_bottom, t_boundary) # Borde de abajo (x,y)=(x,0)
-            # S_bottom_pred, I_bottom_pred, R_bottom_pred = SIR_bottom_pred[:, 0:1], SIR_bottom_pred[:, 1:2], SIR_bottom_pred[:, 2:3]
+            SIR_bottom_pred = model(x_boundary, y_bottom, t_boundary) # Borde de abajo (x,y)=(x,0)
+            S_bottom_pred, I_bottom_pred, R_bottom_pred = SIR_bottom_pred[:, 0:1], SIR_bottom_pred[:, 1:2], SIR_bottom_pred[:, 2:3]
 
-            # SIR_left_pred = model(x_left, y_boundary, t_boundary) # Borde de la izquierda (x,y)=(0,y)
-            # S_left_pred, I_left_pred, R_left_pred = SIR_left_pred[:, 0:1], SIR_left_pred[:, 1:2], SIR_left_pred[:, 2:3]
+            SIR_left_pred = model(x_left, y_boundary, t_boundary) # Borde de la izquierda (x,y)=(0,y)
+            S_left_pred, I_left_pred, R_left_pred = SIR_left_pred[:, 0:1], SIR_left_pred[:, 1:2], SIR_left_pred[:, 2:3]
 
-            # SIR_right_pred = model(x_right, y_boundary, t_boundary) # Borde de la derecha (x,y)=(1,y)
-            # S_right_pred, I_right_pred, R_right_pred = SIR_right_pred[:, 0:1], SIR_right_pred[:, 1:2], SIR_right_pred[:, 2:3]
+            SIR_right_pred = model(x_right, y_boundary, t_boundary) # Borde de la derecha (x,y)=(1,y)
+            S_right_pred, I_right_pred, R_right_pred = SIR_right_pred[:, 0:1], SIR_right_pred[:, 1:2], SIR_right_pred[:, 2:3]
 
             # # Pérdida por condiciones de borde
+            loss_top_bc = (S_top_pred - S_bottom_pred).pow(2).mean() + (I_top_pred - I_bottom_pred).pow(2).mean() + (R_top_pred - R_bottom_pred).pow(2).mean()
+            loss_left_bc = (S_left_pred - S_right_pred).pow(2).mean() + (I_left_pred - I_right_pred).pow(2).mean() + (R_left_pred - R_right_pred).pow(2).mean()
+
             # loss_top_bc = (S_top_pred).pow(2).mean() + (I_top_pred).pow(2).mean() + (R_top_pred).pow(2).mean()
             # loss_bottom_bc = (S_bottom_pred).pow(2).mean() + (I_bottom_pred).pow(2).mean() + (R_bottom_pred).pow(2).mean()
             # loss_left_bc = (S_left_pred).pow(2).mean() + (I_left_pred).pow(2).mean() + (R_left_pred).pow(2).mean()
             # loss_right_bc = (S_right_pred).pow(2).mean() + (I_right_pred).pow(2).mean() + (R_right_pred).pow(2).mean()
 
             # loss_bc = loss_top_bc + loss_bottom_bc + loss_left_bc + loss_right_bc
+            loss_bc = loss_top_bc + loss_left_bc
+
+            loss_phys = (S_pred + I_pred + R_pred - 1).pow(2).mean()
 
             # Pérdida total
-            loss = loss_pde + loss_ic #+ loss_bc
+            loss = loss_pde + loss_ic + loss_bc + loss_phys
             loss.backward()
             last_loss = loss.item()
             return loss
@@ -158,7 +164,7 @@ def train_pinn(beta_val, gamma_val, D_I, mean_x, mean_y, sigma_x, sigma_y, epoch
             loss = closure()
             optimizer.step()
             if epoch % 100 == 0 or epoch == epochs_adam - 1:
-                print(f"[Bloque {i+1}/{N_blocks}] Adam Época {epoch} | Loss: {loss.item():.6f}")
+                print(f"[Bloque {i+1}/{N_blocks}] Adam Época {epoch} | Loss: {loss.item()}")
 
         # Predicción al final del bloque como nueva condición inicial
         t_next = torch.full((N_initial, 1), t1, device=device)
