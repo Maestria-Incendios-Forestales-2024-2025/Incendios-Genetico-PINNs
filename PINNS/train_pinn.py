@@ -6,6 +6,27 @@ import torch.optim as optim # type: ignore
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
+############################## FUNCIÓN QUE IMPLEMENTA LHS CON TORCH ###############################################
+
+def lhs_torch(n, d, device="cuda"):
+    """
+    Latin Hypercube Sampling (LHS) en GPU usando PyTorch.
+    
+    n: número de muestras
+    d: número de dimensiones
+    """
+    # Paso 1: Crear una matriz de índices (n, d) con permutaciones aleatorias por columna
+    perm = torch.empty((n, d), dtype=torch.float32, device=device)
+    for i in range(d):
+        perm[:, i] = torch.randperm(n, device=device)
+
+    # Paso 2: Generar ruido aleatorio dentro de cada intervalo
+    rng = torch.rand((n, d), device=device)
+
+    # Paso 3: Calcular las posiciones normalizadas en [0, 1]
+    samples = (perm + rng) / n
+    return samples
+
 ############################## DEFINICIÓN DE LA PINN ###############################################
 
 # Definir la red neuronal PINN
@@ -44,15 +65,10 @@ def train_pinn(beta_val, gamma_val, D_I, mean_x, mean_y, sigma_x, sigma_y, epoch
     N_boundary = 2000    # Puntos para condiciones de borde
     N_initial = 4000     # Puntos para condiciones iniciales
 
-    # Sampleo (x, y, t) en el dominio interior (0,1)x(0,1)x(0,1)
-    # x_interior = torch.rand(N_interior, 1, device=device)
-    # y_interior = torch.rand(N_interior, 1, device=device)
-    # t_interior = torch.rand(N_interior, 1, device=device)
-    # x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
-
     # Puntos de condiciones iniciales (t=0)
-    x_init = torch.rand(N_initial-1, 1, device=device)
-    y_init = torch.rand(N_initial-1, 1, device=device)
+    samples_init = lhs_torch(N_initial-1, 2)
+    x_init = samples_init[:, [0]]
+    y_init = samples_init[:, [1]]
     t_init = torch.zeros(N_initial, 1, device=device)
 
     # Agregar el punto de ignición manualmente
@@ -72,9 +88,11 @@ def train_pinn(beta_val, gamma_val, D_I, mean_x, mean_y, sigma_x, sigma_y, epoch
     x_right = torch.ones(N_boundary, 1, device=device) # x=1
     y_top = torch.ones(N_boundary, 1, device=device) # y=1
     y_bottom = torch.zeros(N_boundary, 1, device=device) # y=0
-    x_boundary = torch.rand(N_boundary, 1, device=device) # x en (0, 1)
-    y_boundary = torch.rand(N_boundary, 1, device=device) # y en (0, 1)
-    t_boundary = torch.rand(N_boundary, 1, device=device) # t en (0, 1)
+    samples_boundary = lhs_torch(N_boundary, 3)
+    
+    x_boundary = samples_boundary[:, [0]]
+    y_boundary = samples_boundary[:, [1]]
+    t_boundary = samples_boundary[:, [2]]
 
     T_final = 1.0
     t_blocks = torch.linspace(0, T_final, N_blocks + 1, device=device)
@@ -85,9 +103,11 @@ def train_pinn(beta_val, gamma_val, D_I, mean_x, mean_y, sigma_x, sigma_y, epoch
         t0, t1 = t_blocks[i].item(), t_blocks[i+1].item()
 
         # Puntos temporales para este bloque
-        t_interior = t0 + (t1 - t0) * torch.rand(N_interior, 1, device=device)
-        x_interior = torch.rand(N_interior, 1, device=device)
-        y_interior = torch.rand(N_interior, 1, device=device)
+        samples_interior = lhs_torch(N_interior, 3)
+        x_interior = lhs_torch[:, [0]]
+        y_interior = lhs_torch[:, [1]]
+        t_interior = t0 + (t1 - t0) * samples_interior[:, [2]]
+        
         x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
 
         t_init = torch.full((N_initial, 1), t0, device=device)
@@ -168,8 +188,11 @@ def train_pinn(beta_val, gamma_val, D_I, mean_x, mean_y, sigma_x, sigma_y, epoch
 
         # Predicción al final del bloque como nueva condición inicial
         t_next = torch.full((N_initial, 1), t1, device=device)
-        x_init = torch.rand(N_initial, 1, device=device)
-        y_init = torch.rand(N_initial, 1, device=device)
+        samples_init = lhs_torch(N_initial, 2)
+        x_init = samples_init[:, [0]]
+        y_init = samples_init[:, [1]]
+        # x_init = torch.rand(N_initial, 1, device=device)
+        # y_init = torch.rand(N_initial, 1, device=device)
         with torch.no_grad():
             SIR_next = model(x_init, y_init, t_next)
         S_init = SIR_next[:, 0:1].detach()
