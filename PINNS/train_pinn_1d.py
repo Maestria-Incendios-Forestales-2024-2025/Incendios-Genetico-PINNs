@@ -1,7 +1,6 @@
 import torch # type: ignore
 import torch.nn as nn # type: ignore
 import torch.optim as optim # type: ignore
-import cupy as cp # type: ignore
 
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,93 +33,112 @@ class FireSpread_PINN(nn.Module):
 
 ############################## FUNCIÓN DE ENTRENAMIENTO ###############################################
 
+dominio_total = [0, 10.0]
+subdominios = [(i, i + 1.0) for i in range(10)]
 # Función para entrenar la PINN con ecuaciones de propagación de fuego
-def train_pinn(D_I, epochs_adam=1000, epochs_lbfgs=20):
-    model = FireSpread_PINN().to(device)
-    #model.double()
+def train_pinn(D_I, beta_val, gamma_val, epochs_adam=1000, epochs_lbfgs=20):
+    pinns = [FireSpread_PINN().to(device) for _ in subdominios]
 
     # Configuración del dominio
     N_interior, N_boundary, N_initial = 20000, 2000, 4000
+    N_interface = 1000
+    t_interface = torch.rand(N_interface, 1, device=device)
 
-    x_ignition = torch.tensor([[0.4]], device=device)#.double()
+    x_ignition = torch.tensor([[0.45]], device=device)
 
-    x_init = torch.rand(N_initial - 1, 1, device=device)#.double()
-    t_init = torch.zeros(N_initial, 1, device=device)#.double()
-    x_init = torch.cat([x_init, x_ignition], dim=0)
+    for i, ((x_min, x_max), model) in enumerate(zip(subdominios, pinns)):
+        x_interior = torch.rand(N_interior, 1, device=device)
+        t_interior = torch.rand(N_interior, 1, device=device)
+        x_interior.requires_grad, t_interior.requires_grad = True, True
 
-    sigma_x = 0.05
-    I_init = torch.exp(-0.5 * ((x_init - x_ignition) / sigma_x) ** 2)
-    S_init = 1 - I_init
-    R_init = torch.zeros_like(I_init)
+        if x_min < x_ignition.item() and x_max > x_ignition.item():
+            x_init = torch.rand(N_initial - 1, 1, device=device)
+            x_init = torch.cat([x_init, x_ignition], dim=0)
+        else:
+            x_init = torch.rand(N_initial, 1, device=device)
 
-    beta_val = 0.3
-    gamma_val = 0.1
+        t_init = torch.zeros(N_initial, 1, device=device)
 
-    x_interior = torch.rand(N_interior, 1, device=device)#.double()
-    t_interior = torch.rand(N_interior, 1, device=device)#.double()
-    x_interior.requires_grad, t_interior.requires_grad = True, True
+        sigma_x = 0.05
+        I_init = torch.exp(-0.5 * ((x_init - x_ignition) / sigma_x) ** 2)
+        S_init = 1 - I_init
+        R_init = torch.zeros_like(I_init)
 
-    beta_sampled = torch.full((N_interior, 1), beta_val, device=device)#.double()
-    gamma_sampled = torch.full((N_interior, 1), gamma_val, device=device)#.double()
+        x_left = torch.zeros(N_boundary, 1, device=device)
+        x_right = torch.ones(N_boundary, 1, device=device)
+        t_boundary = torch.rand(N_boundary, 1, device=device)
 
-    x_left = torch.zeros(N_boundary, 1, device=device)#.double()
-    x_right = torch.ones(N_boundary, 1, device=device)#.double()
-    t_boundary = torch.rand(N_boundary, 1, device=device)#.double()
+        beta_sampled = torch.full((N_interior, 1), beta_val, device=device)
+        gamma_sampled = torch.full((N_interior, 1), gamma_val, device=device)
 
-    # --------- Cierre de optimización ---------
-    last_loss = None
-    def closure():
-        nonlocal last_loss
+        # Modelos vecinos
+        left_model = pinns[i - 1] if i > 0 else None
+        right_model = pinns[i + 1] if i < len(subdominios) - 1 else None
 
-        SIR_pred = model(x_interior, t_interior)
-        S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
+        # Interfaces
+        x_interface_left = torch.zeros(N_interface, 1, device=device) if i > 0 else None
+        x_interface_right = torch.ones(N_interface, 1, device=device) if i < len(subdominios) - 1 else None
 
-        dS_dt = torch.autograd.grad(S_pred, t_interior, torch.ones_like(S_pred), create_graph=True)[0]
-        dI_dt = torch.autograd.grad(I_pred, t_interior, torch.ones_like(I_pred), create_graph=True)[0]
-        dR_dt = torch.autograd.grad(R_pred, t_interior, torch.ones_like(R_pred), create_graph=True)[0]
-        dI_dx = torch.autograd.grad(I_pred, x_interior, torch.ones_like(I_pred), create_graph=True)[0]
-        d2I_dx2 = torch.autograd.grad(dI_dx, x_interior, torch.ones_like(dI_dx), create_graph=True)[0]
+        # --------- Cierre de optimización ---------
+        def make_closure():
+            def closure():
+                model.train()
+                SIR_pred = model(x_interior, t_interior)
+                S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
 
-        loss_S = dS_dt + beta_sampled * S_pred * I_pred
-        loss_I = dI_dt - (beta_sampled * S_pred * I_pred - gamma_sampled * I_pred) - D_I * d2I_dx2
-        loss_R = dR_dt - gamma_sampled * I_pred
-        loss_pde = loss_S.pow(2).mean() + loss_I.pow(2).mean() + loss_R.pow(2).mean()
+                dS_dt = torch.autograd.grad(S_pred, t_interior, torch.ones_like(S_pred), create_graph=True)[0]
+                dI_dt = torch.autograd.grad(I_pred, t_interior, torch.ones_like(I_pred), create_graph=True)[0]
+                dR_dt = torch.autograd.grad(R_pred, t_interior, torch.ones_like(R_pred), create_graph=True)[0]
 
-        SIR_init_pred = model(x_init, t_init)
-        S_init_pred, I_init_pred, R_init_pred = SIR_init_pred[:, 0:1], SIR_init_pred[:, 1:2], SIR_init_pred[:, 2:3]
-        loss_ic = (S_init_pred - S_init).pow(2).mean() + (I_init_pred - I_init).pow(2).mean() + (R_init_pred - R_init).pow(2).mean()
+                dI_dx = torch.autograd.grad(I_pred, x_interior, torch.ones_like(I_pred), create_graph=True)[0]
+                d2I_dx2 = torch.autograd.grad(dI_dx, x_interior, torch.ones_like(dI_dx), create_graph=True)[0]
 
-        #S_left_pred, I_left_pred, R_left_pred = model(x_left, t_boundary)[:, 0:1], model(x_left, t_boundary)[:, 1:2], model(x_left, t_boundary)[:, 2:3]
-        #S_right_pred, I_right_pred, R_right_pred = model(x_right, t_boundary)[:, 0:1], model(x_right, t_boundary)[:, 1:2], model(x_right, t_boundary)[:, 2:3]
-        #loss_bc = (S_left_pred**2).mean() + (I_left_pred**2).mean() + (R_left_pred**2).mean() + (S_right_pred**2).mean() + (I_right_pred**2).mean() + (R_right_pred**2).mean()
+                loss_S = (dS_dt + beta_sampled).pow(2).mean()
+                loss_I = (dI_dt - beta_sampled*S_pred*I_pred + gamma_sampled*I_pred - D_I*d2I_dx2).pow(2).mean()
+                loss_R = (dR_dt - gamma_sampled*I_pred)
 
-        loss = loss_pde + loss_ic #+ loss_bc
-        loss.backward()
-        last_loss = loss.item()
-        return loss
+                loss_pde = loss_S + loss_I + loss_R
 
-    # --------- Primera etapa: Adam ---------
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    for epoch in range(epochs_adam):
-        optimizer.zero_grad()
-        loss = closure()
-        optimizer.step()
-        if epoch % 100 == 0 or epoch == epochs_adam - 1:
-            print(f"[Adam] Época {epoch} | Loss: {loss.item():.6f}")
+                # Condición inicial
+                SIR_init_pred = model(x_init, t_init)
+                S_init_pred, I_init_pred, R_init_pred = SIR_init_pred[:, 0:1], SIR_init_pred[:, 1:2], SIR_init_pred[:, 2:3]
+                loss_ic = (S_init_pred - S_init).pow(2).mean() + (I_init_pred - I_init).pow(2).mean() + (R_init_pred - R_init).pow(2).mean()
 
-    #--------- Segunda etapa: LBFGS ---------
-    # optimizer = optim.LBFGS(
-    #     model.parameters(),
-    #     lr=2.0,
-    #     max_iter=500,
-    #     history_size=50,
-    #     tolerance_grad=1e-10,
-    #     tolerance_change=1e-9,
-    #     line_search_fn="strong_wolfe"
-    # )
+                # Acomplamiento con subdominios vecinos
+                loss_interface = 0.0
+                if left_model is not None and x_interface_left is not None:
+                    pred_left = left_model(x_interface_left, t_interface)
+                    S_left, I_left, R_left = pred_left[:, 0:1], pred_left[:, 1:2], pred_left[:, 2:3]
+                    pred_curr = model(x_interface_left, t_interface)
+                    S_curr, I_curr, R_curr = pred_curr[:, 0:1], pred_curr[:, 1:2], pred_curr[:, 2:3]
+                    loss_interface += (S_left - S_curr).pow(2).mean() + (I_left - I_curr).pow(2).mean() + (R_left - R_curr).pow(2).mean()
 
-    # for epoch in range(epochs_lbfgs):
-    #     optimizer.step(closure)
-    #     print(f"[LBFGS] Época {epoch} | Loss final: {last_loss:.6f}")
+                if right_model is not None and x_interface_right is not None:
+                    pred_right = right_model(x_interface_right, t_interface)
+                    S_right, I_right, R_right = pred_right[:, 0:1], pred_right[:, 1:2], pred_right[:, 2:3]
+                    pred_curr = model(x_interface_right, t_interface)
+                    S_curr, I_curr, R_curr = pred_curr[:, 0:1], pred_curr[:, 1:2], pred_curr[:, 2:3]
+                    loss_interface += (S_right - S_curr).pow(2).mean() + (I_right - I_curr).pow(2).mean() + (R_right - R_curr).pow(2).mean()
 
-    return model
+                loss = loss_pde + loss_ic + loss_interface
+                loss.backward()
+                return loss
+            
+            return closure
+        
+        closure = make_closure()
+                                                                                                                      
+        # --------- Primera etapa: Adam ---------
+        optimizer = optim.Adam(model.parameters(), lr=1e-3)
+        for epoch in range(epochs_adam):
+            optimizer.zero_grad()
+            loss = closure()
+            optimizer.step()
+            if epoch % 200 == 0 or epoch == epochs_adam - 1:
+                print(f"[Adam] Subdominio {i} | Época {epoch} | Loss: {loss.item():.6f}")
+
+        # --------- Optimización: LBFGS ---------
+        # optimizer_lbfgs = optim.LBFGS(model.parameters(), max_iter=epochs_lbfgs, history_size=50)
+        # optimizer_lbfgs.step(closure)
+
+    return pinns
