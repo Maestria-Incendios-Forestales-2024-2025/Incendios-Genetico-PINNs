@@ -44,7 +44,7 @@ def train_pinn(D_I, beta_val, gamma_val, epochs_adam=1000, epochs_lbfgs=20):
     N_interface = 1000
     t_interface = torch.rand(N_interface, 1, device=device)
 
-    x_ignition = torch.tensor([[0.45]], device=device)
+    x_ignition = torch.tensor([[4.5]], device=device)
 
     for i, ((x_min, x_max), model) in enumerate(zip(subdominios, pinns)):
         x_interior = torch.rand(N_interior, 1, device=device)
@@ -53,15 +53,18 @@ def train_pinn(D_I, beta_val, gamma_val, epochs_adam=1000, epochs_lbfgs=20):
 
         if x_min < x_ignition.item() and x_max > x_ignition.item():
             x_init = torch.rand(N_initial - 1, 1, device=device)
+            x_ignition /= 10
             x_init = torch.cat([x_init, x_ignition], dim=0)
+            
+            sigma_x = 0.05
+            I_init = torch.exp(-0.5 * ((x_init - x_ignition) / sigma_x) ** 2)
+            S_init = 1 - I_init
         else:
             x_init = torch.rand(N_initial, 1, device=device)
+            I_init = torch.zeros_like(x_init)
+            S_init = torch.ones_like(x_init)
 
         t_init = torch.zeros(N_initial, 1, device=device)
-
-        sigma_x = 0.05
-        I_init = torch.exp(-0.5 * ((x_init - x_ignition) / sigma_x) ** 2)
-        S_init = 1 - I_init
         R_init = torch.zeros_like(I_init)
 
         x_left = torch.zeros(N_boundary, 1, device=device)
@@ -95,7 +98,7 @@ def train_pinn(D_I, beta_val, gamma_val, epochs_adam=1000, epochs_lbfgs=20):
 
                 loss_S = (dS_dt + beta_sampled).pow(2).mean()
                 loss_I = (dI_dt - beta_sampled*S_pred*I_pred + gamma_sampled*I_pred - D_I*d2I_dx2).pow(2).mean()
-                loss_R = (dR_dt - gamma_sampled*I_pred)
+                loss_R = (dR_dt - gamma_sampled*I_pred).pow(2).mean()
 
                 loss_pde = loss_S + loss_I + loss_R
 
@@ -120,7 +123,9 @@ def train_pinn(D_I, beta_val, gamma_val, epochs_adam=1000, epochs_lbfgs=20):
                     S_curr, I_curr, R_curr = pred_curr[:, 0:1], pred_curr[:, 1:2], pred_curr[:, 2:3]
                     loss_interface += (S_right - S_curr).pow(2).mean() + (I_right - I_curr).pow(2).mean() + (R_right - R_curr).pow(2).mean()
 
-                loss = loss_pde + loss_ic + loss_interface
+                loss_phys = (S_pred + I_pred + R_pred - 1).pow(2).mean()
+
+                loss = loss_pde + loss_ic + loss_interface + loss_phys
                 loss.backward()
                 return loss
             
