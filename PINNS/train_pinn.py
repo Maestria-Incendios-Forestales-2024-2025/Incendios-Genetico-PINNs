@@ -6,70 +6,161 @@ import torch.optim as optim # type: ignore
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-############################## FUNCIÓN QUE IMPLEMENTA LHS CON TORCH ###############################################
-
-def lhs_torch(n, d, device="cuda"):
-    """
-    Latin Hypercube Sampling (LHS) en GPU usando PyTorch.
-    
-    n: número de muestras
-    d: número de dimensiones
-    """
-    # Paso 1: Crear una matriz de índices (n, d) con permutaciones aleatorias por columna
-    perm = torch.empty((n, d), dtype=torch.float32, device=device)
-    for i in range(d):
-        perm[:, i] = torch.randperm(n, device=device)
-
-    # Paso 2: Generar ruido aleatorio dentro de cada intervalo
-    rng = torch.rand((n, d), device=device)
-
-    # Paso 3: Calcular las posiciones normalizadas en [0, 1]
-    samples = (perm + rng) / n
-    return samples
-
 ############################## DEFINICIÓN DE LA PINN ###############################################
+
+domain_size = 5
 
 # Definir la red neuronal PINN
 class FireSpread_PINN(nn.Module):
-    def __init__(self):
-        super(FireSpread_PINN, self).__init__()
-        self.net = nn.Sequential(
-            nn.Linear(3, 64),
-            nn.Tanh(),
-            nn.Linear(64, 256),
-            nn.Tanh(),
-            nn.Linear(256, 256),
-            nn.Tanh(),
-            nn.Linear(256, 128),
-            nn.Tanh(),
-            nn.Linear(128, 128),
-            nn.Tanh(),
-            nn.Linear(128, 64),
-            nn.Tanh(),
-            nn.Linear(64, 3)
-        )
+    def __init__(self, layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3]):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        for i in range(len(layers) - 1):
+            self.layers.append(nn.Linear(layers[i], layers[i+1]))
+        self.activation = nn.Tanh()
 
     def forward(self, x, y, t):
         inputs = torch.cat((x, y, t), dim=1)
-        return self.net(inputs)
+        x_scaled = 2 * (inputs[:, 0:1] / domain_size) - 1
+        y_scaled = 2 * (inputs[:, 1:2] / domain_size) - 1
+        t_scaled = 2 * (inputs[:, 2:3] / 10) - 1
+        out = torch.cat([x_scaled, y_scaled, t_scaled], dim=1)
+        for layer in self.layers[:-1]:
+            out = self.activation(layer(out))
+        return self.layers[-1](out)
 
-############################## FUNCIÓN DE ENTRENAMIENTO ###############################################
+############################## PÉRDIDA POR CONDICIONES INICIALES ###############################################
+
+def loss_initial_condition(model, x_ic, y_ic, t_ic, S0, I0, R0):
+    pred = model(x_ic, y_ic, t_ic)
+    S_pred, I_pred, R_pred = pred[:, 0:1], pred[:, 1:2], pred[:, 2:3]
+    return nn.MSELoss()(S_pred, S0) + nn.MSELoss()(I_pred, I0) + nn.MSELoss()(R_pred, R0)
+
+############################## PÉRDIDA POR CONDICIONES DE BORDE ###############################################
+
+def loss_boundary_condition(model, y_top, y_bottom, x_left, x_right, x_bc, y_bc, t_bc):
+    top_pred = model(x_bc, y_top, t_bc) # Borde de arriba (x,y)=(x,1)
+    S_top_pred, I_top_pred, R_top_pred = top_pred[:, 0:1], top_pred[:, 1:2], top_pred[:, 2:3]
+
+    bottom_pred = model(x_bc, y_bottom, t_bc) # Borde de abajo (x,y)=(x,0)
+    S_bottom_pred, I_bottom_pred, R_bottom_pred = bottom_pred[:, 0:1], bottom_pred[:, 1:2], bottom_pred[:, 2:3]
+
+    left_pred = model(x_left, y_bc, t_bc) # Borde de la izquierda (x,y)=(0,y)
+    S_left_pred, I_left_pred, R_left_pred = left_pred[:, 0:1], left_pred[:, 1:2], left_pred[:, 2:3]
+
+    right_pred = model(x_right, y_bc, t_bc) # Borde de la derecha (x,y)=(1,y)
+    S_right_pred, I_right_pred, R_right_pred = right_pred[:, 0:1], right_pred[:, 1:2], right_pred[:, 2:3]
+
+    # Pérdida por condiciones de borde
+    loss_top_bc = nn.MSELoss()(S_top_pred, S_bottom_pred) + nn.MSELoss()(I_top_pred, I_bottom_pred) + nn.MSELoss()(R_top_pred, R_bottom_pred)
+    loss_left_bc = nn.MSELoss()(S_left_pred, S_right_pred) + nn.MSELoss()(I_left_pred, I_right_pred) + nn.MSELoss()(R_left_pred, R_right_pred)
+
+    return loss_top_bc + loss_left_bc
+
+############################## PÉRDIDA POR LA FÍSICA ###############################################
+
+def loss_pde(model, x_phys, y_phys, t_phys, D_I, beta_val, gamma_val, return_pointwise=False):
+    x_phys.requires_grad = True
+    y_phys.requires_grad = True
+    t_phys.requires_grad = True
+
+    SIR_pred = model(x_phys, y_phys, t_phys)
+    S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
+
+    dS_dt = torch.autograd.grad(S_pred, t_phys, torch.ones_like(S_pred), create_graph=True)[0]
+    dI_dt = torch.autograd.grad(I_pred, t_phys, torch.ones_like(I_pred), create_graph=True)[0]
+    dR_dt = torch.autograd.grad(R_pred, t_phys, torch.ones_like(R_pred), create_graph=True)[0]
+
+    dI_dx = torch.autograd.grad(I_pred, x_phys, torch.ones_like(I_pred), create_graph=True)[0]
+    dI_dy = torch.autograd.grad(I_pred, y_phys, torch.ones_like(I_pred), create_graph=True)[0]
+
+    d2I_dx2 = torch.autograd.grad(dI_dx, x_phys, torch.ones_like(dI_dx), create_graph=True)[0]
+    d2I_dy2 = torch.autograd.grad(dI_dy, y_phys, torch.ones_like(dI_dy), create_graph=True)[0]
+
+    loss_S = dS_dt + beta_val * S_pred * I_pred
+    loss_I = dI_dt - (beta_val * S_pred * I_pred - gamma_val * I_pred) - D_I * (d2I_dx2 + d2I_dy2)
+    loss_R = dR_dt - gamma_val * I_pred
+
+    pointwise_error = loss_S**2 + loss_I**2 + loss_R**2  # (N,1)
+
+    if return_pointwise:
+        return pointwise_error.squeeze()  # (N,)
+    else:
+        return pointwise_error.mean()
+
+############################## CIERRE DE OPTIMIZACIÓN ###############################################
+
+def closure(model, optimizer, data, params):
+    optimizer.zero_grad()
+
+    loss_ic = loss_initial_condition(model, *data['ic'])
+    #loss_bc = loss_boundary_condition(model, *data['bc'])
+    loss_phys = loss_pde(model, *data['phys'], *params)
+
+    loss = loss_ic + loss_phys #+ loss_bc
+    loss.backward()
+    return loss
+
+############################## SAMPLEO POR NO LINEALIDAD ###############################################
+
+def sample_by_nonlinearity(model, N_samples, N_candidates=100000):
+    # Step 1: Generate candidates
+    x = domain_size*torch.rand(N_candidates, 1, device=device)
+    y = domain_size*torch.rand(N_candidates, 1, device=device)
+    t = 10*torch.rand(N_candidates, 1, device=device)
+
+    with torch.no_grad():
+        pred = model(x, y, t)
+        S_pred, I_pred = pred[:, 0:1], pred[:, 1:2]
+        nonlin_strength = torch.abs(S_pred * I_pred).squeeze()  # Shape: (N_candidates,)
+
+    # Step 2: Normalize weights to sum to 1
+    weights = nonlin_strength / nonlin_strength.sum()
+
+    # Step 3: Sample indices using importance
+    idx = torch.multinomial(weights, N_samples, replacement=False)
+
+    # Step 4: Return the selected points
+    return x[idx], y[idx], t[idx]
+
+def sample_initial_by_nonlinearity(model, N_samples, N_candidates=100000):
+    # Step 1: Generate candidate points in space, with t=0
+    x = domain_size*torch.rand(N_candidates, 1, device=device)
+    y = domain_size*torch.rand(N_candidates, 1, device=device)
+    t = torch.zeros(N_candidates, 1, device=device)
+
+    with torch.no_grad():
+        pred = model(x, y, t)
+        S_pred, I_pred = pred[:, 0:1], pred[:, 1:2]
+        nonlin_strength = torch.abs(S_pred * I_pred).squeeze()
+
+    # Step 2: Normalize weights to sum to 1
+    weights = nonlin_strength / nonlin_strength.sum()
+
+    # Step 3: Sample using importance
+    idx = torch.multinomial(weights, N_samples, replacement=False)
+
+    # Step 4: Return selected points (t is all zeros)
+    return x[idx], y[idx], t[idx]
+
+############################## ENTRENAMIENTO ###############################################
 
 # Función para entrenar la PINN con ecuaciones de propagación de fuego
-def train_pinn(beta_val, gamma_val, D_I, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10):
+def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10):
     model = FireSpread_PINN().to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     # Genera datos de entrenamiento
-    N_interior = 20000  # Puntos adentro del dominio
+    N_interior = 40000  # Puntos adentro del dominio
     N_boundary = 2000    # Puntos para condiciones de borde
-    N_initial = 4000     # Puntos para condiciones iniciales
+    N_initial = 6000     # Puntos para condiciones iniciales
+
+    # Sampleo (x, y, t) en el dominio interior (0,1)x(0,1)x(0,1)
+    x_interior, y_interior, t_interior = sample_by_nonlinearity(model, N_interior)
+    x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
 
     # Puntos de condiciones iniciales (t=0)
-    samples_init = lhs_torch(N_initial-1, 2)
-    x_init = samples_init[:, [0]]
-    y_init = samples_init[:, [1]]
-    t_init = torch.zeros(N_initial, 1, device=device)
+    x_init, y_init, t_init = sample_initial_by_nonlinearity(model, N_initial-1)
 
     # Agregar el punto de ignición manualmente
     x_ignition = torch.tensor([[mean_x]], device=device)
@@ -78,6 +169,7 @@ def train_pinn(beta_val, gamma_val, D_I, mean_x, mean_y, sigma_x, sigma_y, epoch
     # Concatenar el punto de ignición con los demás puntos
     x_init = torch.cat([x_init, x_ignition], dim=0)
     y_init = torch.cat([y_init, y_ignition], dim=0)
+    t_init = torch.cat([t_init, torch.zeros_like(x_ignition)], dim=0)
 
     I_init = torch.exp(-0.5 * (((x_init - x_ignition) / sigma_x) ** 2 + ((y_init - y_ignition) / sigma_y) ** 2))
     S_init = 1 - I_init
@@ -85,118 +177,46 @@ def train_pinn(beta_val, gamma_val, D_I, mean_x, mean_y, sigma_x, sigma_y, epoch
 
     # Sampleo puntos del borde
     x_left = torch.zeros(N_boundary, 1, device=device) # x=0
-    x_right = torch.ones(N_boundary, 1, device=device) # x=1
-    y_top = torch.ones(N_boundary, 1, device=device) # y=1
+    x_right = domain_size*torch.ones(N_boundary, 1, device=device) # x=1
+    y_top = domain_size*torch.ones(N_boundary, 1, device=device) # y=1
     y_bottom = torch.zeros(N_boundary, 1, device=device) # y=0
-    samples_boundary = lhs_torch(N_boundary, 3)
-    
-    x_boundary = samples_boundary[:, [0]]
-    y_boundary = samples_boundary[:, [1]]
-    t_boundary = samples_boundary[:, [2]]
-
-    T_final = 1.0
-    t_blocks = torch.linspace(0, T_final, N_blocks + 1, device=device)
+    x_boundary = domain_size*torch.rand(N_boundary, 1, device=device) # x en (0, 1)
+    y_boundary = domain_size*torch.rand(N_boundary, 1, device=device) # y en (0, 1)
+    t_boundary = 10*torch.rand(N_boundary, 1, device=device) # t en (0, 1)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    for i in range(N_blocks):
-        t0, t1 = t_blocks[i].item(), t_blocks[i+1].item()
+    # --------- Primera etapa: Adam ---------
+    for epoch in range(epochs_adam):
+        if epoch % 200 == 0 and epoch > 0: # Sampleo adaptativo cada 200 épocas
+            x_interior, y_interior, t_interior = sample_by_nonlinearity(model, N_interior)
+            x_interior.requires_grad = y_interior.requires_grad = t_interior.requires_grad = True
 
-        # Puntos temporales para este bloque
-        samples_interior = lhs_torch(N_interior, 3)
-        x_interior = lhs_torch[:, [0]]
-        y_interior = lhs_torch[:, [1]]
-        t_interior = t0 + (t1 - t0) * samples_interior[:, [2]]
-        
-        x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
+            x_init, y_init, t_init = sample_initial_by_nonlinearity(model, N_initial-1)
 
-        t_init = torch.full((N_initial, 1), t0, device=device)
-    
-        # --------- Cierre de optimización ---------
-        last_loss = None
-        def closure():
-            nonlocal last_loss
+            x_init = torch.cat([x_init, x_ignition], dim=0)
+            y_init = torch.cat([y_init, y_ignition], dim=0)
+            t_init = torch.cat([t_init, torch.zeros_like(x_ignition)], dim=0)
 
-            # Calculamos la perdida de la PDE
-            SIR_pred = model(x_interior, y_interior, t_interior)
-            S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
+            I_init = torch.exp(-0.5 * (((x_init - x_ignition) / sigma_x) ** 2 + ((y_init - y_ignition) / sigma_y) ** 2))
+            S_init = 1 - I_init
+            R_init = torch.zeros_like(I_init)
 
-            dS_dt = torch.autograd.grad(S_pred, t_interior, torch.ones_like(S_pred).to(device), create_graph=True)[0]
-            dI_dt = torch.autograd.grad(I_pred, t_interior, torch.ones_like(I_pred).to(device), create_graph=True)[0]
-            dR_dt = torch.autograd.grad(R_pred, t_interior, torch.ones_like(R_pred).to(device), create_graph=True)[0]
+            print(f"[Epoch {epoch}] Sampleo adaptativo realizado.")
 
-            dI_dx = torch.autograd.grad(I_pred, x_interior, torch.ones_like(I_pred).to(device), create_graph=True)[0]
-            dI_dy = torch.autograd.grad(I_pred, y_interior, torch.ones_like(I_pred).to(device), create_graph=True)[0]
+        data = {
+            'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
+            'bc': (y_top, y_bottom, x_left, x_right, x_boundary, y_boundary, t_boundary),
+            'phys': (x_interior, y_interior, t_interior)
+        }
 
-            d2I_dx2 = torch.autograd.grad(dI_dx, x_interior, torch.ones_like(dI_dx).to(device), create_graph=True)[0]
-            d2I_dy2 = torch.autograd.grad(dI_dy, y_interior, torch.ones_like(dI_dy).to(device), create_graph=True)[0]
+        params = (D_I, beta_val, gamma_val)
 
-            # Definir pérdidas basadas en las ecuaciones diferenciales
-            loss_S = dS_dt + beta_val * S_pred * I_pred
-            loss_I = dI_dt - (beta_val * S_pred * I_pred - gamma_val * I_pred) - D_I * (d2I_dx2 + d2I_dy2) 
-            loss_R = dR_dt - gamma_val * I_pred
+        optimizer.zero_grad()
+        loss = closure(model, optimizer, data, params)
+        optimizer.step()
 
-            loss_pde = loss_S.pow(2).mean() + loss_I.pow(2).mean() + loss_R.pow(2).mean()
-
-            # Calcular salida de la red en t=0 para condición inicial
-            SIR_init_pred = model(x_init, y_init, t_init)
-            S_init_pred, I_init_pred, R_init_pred = SIR_init_pred[:, 0:1], SIR_init_pred[:, 1:2], SIR_init_pred[:, 2:3]
-
-            # Pérdida por condición inicial (forzar que la red prediga bien los valores iniciales)
-            loss_ic = (S_init_pred - S_init).pow(2).mean() + (I_init_pred - I_init).pow(2).mean() + (R_init_pred - R_init).pow(2).mean()
-
-            # # Calcular salida de la red para los bordes
-            SIR_top_pred = model(x_boundary, y_top, t_boundary) # Borde de arriba (x,y)=(x,1)
-            S_top_pred, I_top_pred, R_top_pred = SIR_top_pred[:, 0:1], SIR_top_pred[:, 1:2], SIR_top_pred[:, 2:3]
-
-            SIR_bottom_pred = model(x_boundary, y_bottom, t_boundary) # Borde de abajo (x,y)=(x,0)
-            S_bottom_pred, I_bottom_pred, R_bottom_pred = SIR_bottom_pred[:, 0:1], SIR_bottom_pred[:, 1:2], SIR_bottom_pred[:, 2:3]
-
-            SIR_left_pred = model(x_left, y_boundary, t_boundary) # Borde de la izquierda (x,y)=(0,y)
-            S_left_pred, I_left_pred, R_left_pred = SIR_left_pred[:, 0:1], SIR_left_pred[:, 1:2], SIR_left_pred[:, 2:3]
-
-            SIR_right_pred = model(x_right, y_boundary, t_boundary) # Borde de la derecha (x,y)=(1,y)
-            S_right_pred, I_right_pred, R_right_pred = SIR_right_pred[:, 0:1], SIR_right_pred[:, 1:2], SIR_right_pred[:, 2:3]
-
-            # # Pérdida por condiciones de borde
-            loss_top_bc = (S_top_pred - S_bottom_pred).pow(2).mean() + (I_top_pred - I_bottom_pred).pow(2).mean() + (R_top_pred - R_bottom_pred).pow(2).mean()
-            loss_left_bc = (S_left_pred - S_right_pred).pow(2).mean() + (I_left_pred - I_right_pred).pow(2).mean() + (R_left_pred - R_right_pred).pow(2).mean()
-
-            # loss_top_bc = (S_top_pred).pow(2).mean() + (I_top_pred).pow(2).mean() + (R_top_pred).pow(2).mean()
-            # loss_bottom_bc = (S_bottom_pred).pow(2).mean() + (I_bottom_pred).pow(2).mean() + (R_bottom_pred).pow(2).mean()
-            # loss_left_bc = (S_left_pred).pow(2).mean() + (I_left_pred).pow(2).mean() + (R_left_pred).pow(2).mean()
-            # loss_right_bc = (S_right_pred).pow(2).mean() + (I_right_pred).pow(2).mean() + (R_right_pred).pow(2).mean()
-
-            # loss_bc = loss_top_bc + loss_bottom_bc + loss_left_bc + loss_right_bc
-            loss_bc = loss_top_bc + loss_left_bc
-
-            loss_phys = (S_pred + I_pred + R_pred - 1).pow(2).mean()
-
-            # Pérdida total
-            loss = loss_pde + loss_ic + loss_bc + loss_phys
-            loss.backward()
-            last_loss = loss.item()
-            return loss
-    
-        # --------- Primera etapa: Adam ---------
-        for epoch in range(epochs_adam):
-            optimizer.zero_grad()
-            loss = closure()
-            optimizer.step()
-            if epoch % 100 == 0 or epoch == epochs_adam - 1:
-                print(f"[Bloque {i+1}/{N_blocks}] Adam Época {epoch} | Loss: {loss.item()}")
-
-        # Predicción al final del bloque como nueva condición inicial
-        t_next = torch.full((N_initial, 1), t1, device=device)
-        samples_init = lhs_torch(N_initial, 2)
-        x_init = samples_init[:, [0]]
-        y_init = samples_init[:, [1]]
-        # x_init = torch.rand(N_initial, 1, device=device)
-        # y_init = torch.rand(N_initial, 1, device=device)
-        with torch.no_grad():
-            SIR_next = model(x_init, y_init, t_next)
-        S_init = SIR_next[:, 0:1].detach()
-        I_init = SIR_next[:, 1:2].detach()
-        R_init = SIR_next[:, 2:3].detach()
+        if epoch % 100 == 0 or epoch == epochs_adam - 1:
+            print(f"Adam Época {epoch} | Loss: {loss.item()}")
 
     return model, loss

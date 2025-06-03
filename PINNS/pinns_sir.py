@@ -1,6 +1,6 @@
-import numpy as np
 import torch # type: ignore
 from train_pinn import train_pinn
+import sys
 
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -8,22 +8,15 @@ print(f"Using device: {device}")
 
 ############################## PARÁMETROS DE LOS MAPAS ###############################################
 
-# Parámetros que uso para resolver numéricamente
-# Tamaño de cada celda
-d = 30 # metros
-# Coeficiente de difusión
-D = 50 # metros^2/h
-# Paso temporal
-dt = 1/6 # horas
+# Parámetros fijos
+gamma_val = 0.3
+mean_x, mean_y = 1.0, 1.0
+sigma_x, sigma_y = 0.05, 0.05
+epochs_adam = 10000
 
-D_I = D * dt / (d**2)
-beta_val = 0.3 * dt
-gamma_val = 0.1 * dt
-epochs_adam = 1000
-
-Nx, Ny = 1768, 1060
-mean_x, mean_y = 700 / Nx, 700 / Ny
-sigma_x, sigma_y = 10 / Nx, 10 / Ny
+# Parámetros variables (desde línea de comandos)
+D_I = float(sys.argv[1])
+beta_val = float(sys.argv[2])
 
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
 
@@ -42,4 +35,6 @@ print(f"Training time: {training_time:.2f} seconds")
 
 ############################## GUARDADO DEL MODELO ENTRENADO ###############################################
 
-torch.save(model.state_dict(), f"modelo_entrenado_pinn_2d_{epochs_adam}.pth")
+torch.save(model.state_dict(), f"adaptive_pinns_DI{D_I}_beta{beta_val}.pth")
+
+
