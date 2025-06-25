@@ -3,7 +3,6 @@ import torch.nn as nn # type: ignore
 import torch.optim as optim # type: ignore
 import numpy as np # type: ignore
 import copy
-from pinns_sir import domain_size
 
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -12,6 +11,7 @@ print(f"Using device: {device}")
 ############################## DEFINICIÓN DE LA PINN ###############################################
 
 temporal_domain = 10
+domain_size = 2
 
 # Definir la red neuronal PINN
 class FireSpread_PINN(nn.Module):

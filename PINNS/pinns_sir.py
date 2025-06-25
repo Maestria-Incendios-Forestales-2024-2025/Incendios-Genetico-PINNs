@@ -1,5 +1,5 @@
 import torch # type: ignore
-from train_pinn import train_pinn
+from train_pinn import train_pinn, domain_size
 import sys
 
 # Device
