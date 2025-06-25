@@ -10,7 +10,8 @@ print(f"Using device: {device}")
 
 # Parámetros fijos
 gamma_val = 0.3
-mean_x, mean_y = 1.0, 1.0
+domain_size = 2
+mean_x, mean_y = domain_size / 2, domain_size / 2
 sigma_x, sigma_y = 0.05, 0.05
 epochs_adam = 10000
 
@@ -24,13 +25,14 @@ start_time = torch.cuda.Event(enable_timing=True)
 end_time = torch.cuda.Event(enable_timing=True)
 
 start_time.record()
-model, loss = train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=epochs_adam)
+model, best_loss = train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=epochs_adam)
 end_time.record()
 
 # Sincronizar para asegurar medición correcta
 torch.cuda.synchronize()
 training_time = start_time.elapsed_time(end_time) / 1000  # Convertir de ms a s
 
+print(f"Mejor modelo guardado. Best Loss: {best_loss}")
 print(f"Training time: {training_time:.2f} seconds")
 
 ############################## GUARDADO DEL MODELO ENTRENADO ###############################################

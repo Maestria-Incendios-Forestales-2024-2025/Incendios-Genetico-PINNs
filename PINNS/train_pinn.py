@@ -1,6 +1,9 @@
 import torch # type: ignore
 import torch.nn as nn # type: ignore
 import torch.optim as optim # type: ignore
+import numpy as np # type: ignore
+import copy
+from pinns_sir import domain_size
 
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -8,7 +11,7 @@ print(f"Using device: {device}")
 
 ############################## DEFINICIÓN DE LA PINN ###############################################
 
-domain_size = 5
+temporal_domain = 10
 
 # Definir la red neuronal PINN
 class FireSpread_PINN(nn.Module):
@@ -23,7 +26,7 @@ class FireSpread_PINN(nn.Module):
         inputs = torch.cat((x, y, t), dim=1)
         x_scaled = 2 * (inputs[:, 0:1] / domain_size) - 1
         y_scaled = 2 * (inputs[:, 1:2] / domain_size) - 1
-        t_scaled = 2 * (inputs[:, 2:3] / 10) - 1
+        t_scaled = 2 * (inputs[:, 2:3] / temporal_domain) - 1
         out = torch.cat([x_scaled, y_scaled, t_scaled], dim=1)
         for layer in self.layers[:-1]:
             out = self.activation(layer(out))
@@ -59,7 +62,7 @@ def loss_boundary_condition(model, y_top, y_bottom, x_left, x_right, x_bc, y_bc,
 
 ############################## PÉRDIDA POR LA FÍSICA ###############################################
 
-def loss_pde(model, x_phys, y_phys, t_phys, D_I, beta_val, gamma_val, return_pointwise=False):
+def loss_pde(model, x_phys, y_phys, t_phys, D_I, beta_val, gamma_val):
     x_phys.requires_grad = True
     y_phys.requires_grad = True
     t_phys.requires_grad = True
@@ -81,33 +84,32 @@ def loss_pde(model, x_phys, y_phys, t_phys, D_I, beta_val, gamma_val, return_poi
     loss_I = dI_dt - (beta_val * S_pred * I_pred - gamma_val * I_pred) - D_I * (d2I_dx2 + d2I_dy2)
     loss_R = dR_dt - gamma_val * I_pred
 
-    pointwise_error = loss_S**2 + loss_I**2 + loss_R**2  # (N,1)
+    return (loss_S**2 + loss_I**2 + loss_R**2).mean()
+    
+############################## PÉRDIDA POR INCONSISTENCIAS ###############################################
 
-    if return_pointwise:
-        return pointwise_error.squeeze()  # (N,)
-    else:
-        return pointwise_error.mean()
+def non_negative_loss(S, I, R):
+    loss = torch.mean(torch.relu(-S)) + torch.mean(torch.relu(-I)) + torch.mean(torch.relu(-R))
+    return loss
 
 ############################## CIERRE DE OPTIMIZACIÓN ###############################################
 
 def closure(model, optimizer, data, params):
-    optimizer.zero_grad()
-
     loss_ic = loss_initial_condition(model, *data['ic'])
-    #loss_bc = loss_boundary_condition(model, *data['bc'])
+    loss_bc = loss_boundary_condition(model, *data['bc'])
     loss_phys = loss_pde(model, *data['phys'], *params)
-
-    loss = loss_ic + loss_phys #+ loss_bc
-    loss.backward()
-    return loss
+    return loss_phys, loss_ic, loss_bc
 
 ############################## SAMPLEO POR NO LINEALIDAD ###############################################
 
-def sample_by_nonlinearity(model, N_samples, N_candidates=100000):
+def sample_by_nonlinearity(model, N_samples, N_candidates=100000, initial_points=False):
     # Step 1: Generate candidates
     x = domain_size*torch.rand(N_candidates, 1, device=device)
     y = domain_size*torch.rand(N_candidates, 1, device=device)
-    t = 10*torch.rand(N_candidates, 1, device=device)
+    if initial_points:
+        t = torch.zeros(N_candidates, 1, device=device)
+    else:
+        t = temporal_domain*torch.rand(N_candidates, 1, device=device)
 
     with torch.no_grad():
         pred = model(x, y, t)
@@ -123,26 +125,6 @@ def sample_by_nonlinearity(model, N_samples, N_candidates=100000):
     # Step 4: Return the selected points
     return x[idx], y[idx], t[idx]
 
-def sample_initial_by_nonlinearity(model, N_samples, N_candidates=100000):
-    # Step 1: Generate candidate points in space, with t=0
-    x = domain_size*torch.rand(N_candidates, 1, device=device)
-    y = domain_size*torch.rand(N_candidates, 1, device=device)
-    t = torch.zeros(N_candidates, 1, device=device)
-
-    with torch.no_grad():
-        pred = model(x, y, t)
-        S_pred, I_pred = pred[:, 0:1], pred[:, 1:2]
-        nonlin_strength = torch.abs(S_pred * I_pred).squeeze()
-
-    # Step 2: Normalize weights to sum to 1
-    weights = nonlin_strength / nonlin_strength.sum()
-
-    # Step 3: Sample using importance
-    idx = torch.multinomial(weights, N_samples, replacement=False)
-
-    # Step 4: Return selected points (t is all zeros)
-    return x[idx], y[idx], t[idx]
-
 ############################## ENTRENAMIENTO ###############################################
 
 # Función para entrenar la PINN con ecuaciones de propagación de fuego
@@ -153,14 +135,14 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
     # Genera datos de entrenamiento
     N_interior = 40000  # Puntos adentro del dominio
     N_boundary = 2000    # Puntos para condiciones de borde
-    N_initial = 6000     # Puntos para condiciones iniciales
+    N_initial = 10000     # Puntos para condiciones iniciales
 
     # Sampleo (x, y, t) en el dominio interior (0,1)x(0,1)x(0,1)
     x_interior, y_interior, t_interior = sample_by_nonlinearity(model, N_interior)
     x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
 
     # Puntos de condiciones iniciales (t=0)
-    x_init, y_init, t_init = sample_initial_by_nonlinearity(model, N_initial-1)
+    x_init, y_init, t_init = sample_by_nonlinearity(model, N_initial-1, initial_points=True)
 
     # Agregar el punto de ignición manualmente
     x_ignition = torch.tensor([[mean_x]], device=device)
@@ -182,9 +164,15 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
     y_bottom = torch.zeros(N_boundary, 1, device=device) # y=0
     x_boundary = domain_size*torch.rand(N_boundary, 1, device=device) # x en (0, 1)
     y_boundary = domain_size*torch.rand(N_boundary, 1, device=device) # y en (0, 1)
-    t_boundary = 10*torch.rand(N_boundary, 1, device=device) # t en (0, 1)
+    t_boundary = temporal_domain*torch.rand(N_boundary, 1, device=device) # t en (0, 1)
 
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    # loss_phys_list, loss_bc_list, loss_ic_list, loss_nonneg_list = [], [], [], []
+    loss_phys_list, loss_bc_list, loss_ic_list = [], [], []
+
+    best_loss = float('inf')
+    best_model_state = None
+
+    print(f"Entrenando PINNs con D = {D_I}, beta = {beta_val}, gamma = {gamma_val}")
 
     # --------- Primera etapa: Adam ---------
     for epoch in range(epochs_adam):
@@ -192,7 +180,7 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
             x_interior, y_interior, t_interior = sample_by_nonlinearity(model, N_interior)
             x_interior.requires_grad = y_interior.requires_grad = t_interior.requires_grad = True
 
-            x_init, y_init, t_init = sample_initial_by_nonlinearity(model, N_initial-1)
+            x_init, y_init, t_init = sample_by_nonlinearity(model, N_initial-1, initial_points=True)
 
             x_init = torch.cat([x_init, x_ignition], dim=0)
             y_init = torch.cat([y_init, y_ignition], dim=0)
@@ -213,10 +201,43 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         params = (D_I, beta_val, gamma_val)
 
         optimizer.zero_grad()
-        loss = closure(model, optimizer, data, params)
+        loss_phys, loss_ic, loss_bc = closure(model, optimizer, data, params)
+
+        # Penalizamos los valores negativos
+        # x_interior.requires_grad = True
+        # y_interior.requires_grad = True
+        # t_interior.requires_grad = True
+        # SIR_pred = model(x_interior, y_interior, t_interior)
+        # S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
+        # loss_nonneg = non_negative_loss(S_pred, I_pred, R_pred)
+
+        loss = loss_phys + loss_ic + loss_bc #+ loss_nonneg
+        loss.backward()
         optimizer.step()
+
+        # Guardar cada pérdida individual
+        loss_phys_list.append(loss_phys.item())
+        loss_ic_list.append(loss_ic.item())
+        loss_bc_list.append(loss_bc.item())
+        # loss_nonneg_list.append(loss_nonneg.item())
+
+        # 📌 Guardar el mejor modelo
+        if loss.item() < best_loss:
+            best_loss = loss.item()
+            best_model_state = copy.deepcopy(model.state_dict())
+            # print(f"✅ Mejor modelo guardado en epoch {epoch} con pérdida total {best_loss:.2e}")
 
         if epoch % 100 == 0 or epoch == epochs_adam - 1:
             print(f"Adam Época {epoch} | Loss: {loss.item()}")
 
-    return model, loss
+    np.save("loss_phys.npy", np.array(loss_phys_list))
+    np.save("loss_ic.npy", np.array(loss_ic_list))
+    np.save("loss_bc.npy", np.array(loss_bc_list))
+    # np.save("loss_nonneg.npy", np.array(loss_nonneg_list))
+
+    # Restaurar el mejor modelo en memoria
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+        model.eval()
+
+    return model, best_loss
