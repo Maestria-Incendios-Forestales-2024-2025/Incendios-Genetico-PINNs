@@ -28,7 +28,7 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 # Ejecutar el GA
-resultados = genetic_algorithm(tamano_poblacion=4, generaciones=2, limite_parametros=limite_parametros)
+resultados = genetic_algorithm(tamano_poblacion=10, generaciones=10, limite_parametros=limite_parametros)
 
 # Sincronizar después de completar la ejecución
 cp.cuda.Stream.null.synchronize()

@@ -47,6 +47,10 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros):
             print(f'Individuo {i+1}: D={D}, A={A}, B={B}, x={x}, y={y}, fitness={fitness}')
             resultados.append({"D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness})
 
+        # Elitismo
+        elite = min(resultados, key=lambda x: x["fitness"])
+        resultados[-1] = elite  # Mantener el mejor individuo de la generación anterior
+
         best_fitness = min(resultados, key=lambda x: x["fitness"])["fitness"]
         print(f'Generación {gen+1}: Mejor fitness = {best_fitness}')
 
