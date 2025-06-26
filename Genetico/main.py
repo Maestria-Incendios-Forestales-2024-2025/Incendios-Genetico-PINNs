@@ -21,14 +21,14 @@ B_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2)))
 ############################## EJECUCIÓN DEL ALGORITMO ###############################################
 
 # Población aleatoria inicial
-limite_parametros = [(0, 1000), (0, A_max * cota), (0, B_max * cota), (500, 900), (500, 900)]
+limite_parametros = [(0, 200), (0, A_max * cota), (0, B_max * cota), (500, 900), (500, 900)]
 
 # Sincronizar antes de empezar a medir el tiempo
 cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 # Ejecutar el GA
-resultados = genetic_algorithm(tamano_poblacion=100, generations=100, param_bounds=limite_parametros)
+resultados = genetic_algorithm(tamano_poblacion=4, generaciones=2, limite_parametros=limite_parametros)
 
 # Sincronizar después de completar la ejecución
 cp.cuda.Stream.null.synchronize()

@@ -12,9 +12,13 @@ wy = datos["wy"]
 h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
 vegetacion = datos["vegetacion"]
-beta_veg = datos["beta_veg"]
-gamma = datos["gamma"]
+beta_veg = datos["beta_veg"].astype(cp.float32)
+gamma = datos["gamma"].astype(cp.float32)
 ny, nx = datos["ny"], datos["nx"]
+
+D = cp.float32(50) # Coeficiente de difusión
+A = cp.float32(5e-4) # Coeficiente de advección por viento
+B = cp.float32(15) # Coeficiente de advección por pendiente
 
 ############################## INCENDIO DE REFERENCIA ###############################################
 
@@ -40,9 +44,9 @@ def aptitud(D, A, B, x, y):
         x, y = cp.random.randint(500, 900), cp.random.randint(500, 900)
 
     # Población inicial de susceptibles e infectados
-    S_i = cp.ones((ny, nx))  # Todos son susceptibles inicialmente
-    I_i = cp.zeros((ny, nx)) # Ningún infectado al principio
-    R_i = cp.zeros((ny, nx))
+    S_i = cp.ones((ny, nx), dtype=cp.float32)  # Todos son susceptibles inicialmente
+    I_i = cp.zeros((ny, nx), dtype=cp.float32) # Ningún infectado al principio
+    R_i = cp.zeros((ny, nx), dtype=cp.float32)
 
     # Si hay combustible, encender fuego
     S_i[x.astype(cp.int32), y.astype(cp.int32)] = 0
@@ -55,8 +59,8 @@ def aptitud(D, A, B, x, y):
     # Iterar sobre las simulaciones
     for t in range(num_steps):
         spread_infection(S=S_i, I=I_i, R=R_i, S_new=S_new_i, I_new=I_new_i, R_new=R_new_i, 
-                         dt=dt, d=d, beta=beta_veg, gamma=gamma, 
-                         D=D, wx=wx, wy=wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa, A=A, B=B)
+                         dt=dt.astype(cp.float32), d=d.astype(cp.float32), beta=beta_veg, gamma=gamma, 
+                         D=D.astype(cp.float32), wx=wx, wy=wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa, A=A.astype(cp.float32), B=B.astype(cp.float32))
         
         S_i, S_new_i = S_new_i, S_i
         I_i, I_new_i = I_new_i, I_i
