@@ -110,7 +110,7 @@ void spread_infection_kernel_raw(const float* S, const float* I, const float* R,
 '''
 
 mod = cp.RawModule(code=kernel_code)
-spread_kernel_raw = mod.get_function('spread_kernel_raw')
+spread_kernel_raw = mod.get_function('spread_infection_kernel_raw')
 
 def spread_infection_raw(S, I, R, S_new, I_new, R_new, 
                          dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
@@ -122,13 +122,13 @@ def spread_infection_raw(S, I, R, S_new, I_new, R_new,
     # Llamar al kernel
     spread_kernel_raw(
         blocks, threads,
-        S, I, R, S_new, I_new, R_new, 
+        (S, I, R, S_new, I_new, R_new, 
         beta, gamma, 
         cp.float32(dt), cp.float32(d), cp.float32(D),
         wx, wy, 
         h_dx, h_dy, 
         cp.float32(A), cp.float32(B),
-        cp.int32(ny), cp.int32(nx)
+        cp.int32(ny), cp.int32(nx))
     )
 
     # Borde = 0

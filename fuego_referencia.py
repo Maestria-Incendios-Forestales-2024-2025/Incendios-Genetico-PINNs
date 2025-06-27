@@ -1,5 +1,5 @@
 from math import sqrt
-from modelo_rdc import spread_infection
+from modelo_rdc import spread_infection_raw
 import numpy as np 
 import cupy as cp # type: ignore
 
@@ -103,7 +103,7 @@ R_new = cp.empty_like(R)
 
 # Iterar sobre las simulaciones
 for t in range(num_steps):
-    spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta_veg, gamma, D, wx, wy, h_dx_mapa, h_dy_mapa, A, B)
+    spread_infection_raw(S, I, R, S_new, I_new, R_new, dt, d, beta_veg, gamma, D, wx, wy, h_dx_mapa, h_dy_mapa, A, B)
 
     # Swap de buffers (intercambiar referencias en lugar de crear nuevos arrays)
     S, S_new = S_new, S
