@@ -1,7 +1,8 @@
 import cupy as cp # type: ignore
 import numpy as np # type: ignore
 
-# Elementwise kernel
+############################## SPREAD INFECTION CON ELEMENTWISE KERNEL ###############################################
+
 spread_kernel = cp.ElementwiseKernel(
     """
     float32 S, float32 I, float32 R, float32 dt, float32 d, float32 beta, float32 gamma, 
@@ -28,7 +29,8 @@ spread_kernel = cp.ElementwiseKernel(
     "spread_kernel"
 )
 
-# Versión hecha con elementwise kernel de cupy
+############################## LLAMADO A KERNEL ###############################################
+
 def spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     I_top = cp.roll(I, -1, axis=0)
     I_bottom = cp.roll(I, 1, axis=0)
@@ -50,11 +52,103 @@ def spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy
     I_new[no_fuel] = 0
     R_new[no_fuel] = 0
 
-# Versión hecha completamente en cupy
+############################## SPREAD INFECTION CON RAW KERNEL ###############################################
+
+kernel_code = r'''
+extern "C" __global__
+void spread_infection_kernel_raw(const float* S, const float* I, const float* R,
+                                  float* S_new, float* I_new, float* R_new,
+                                  const float* beta, const float* gamma,
+                                  const float dt, const float d, const float D, 
+                                  const float* wx, const float* wy,
+                                  const float* h_dx, const float* h_dy,
+                                  const float A, const float B,
+                                  const int ny, const int nx) 
+{
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (i <=0 || i >= nx - 1 || j <= 0 || j >= ny - 1)
+      return;
+      
+    int idx = i * ny + j;
+    int idx_top = (i - 1) * ny + j;
+    int idx_bottom = (i + 1) * ny + j;
+    int idx_left = i * ny + j - 1;
+    int idx_right = i * ny + j + 1;
+    
+    float S_val = S[idx];
+    float I_val = I[idx];
+    float R_val = R[idx];
+    
+    float I_top = I[idx_top];
+    float I_bottom = I[idx_bottom];
+    float I_left = I[idx_left];
+    float I_right = I[idx_right];
+    
+    float beta_val = beta[idx];
+    float gamma_val = gamma[idx];
+    
+    // Actualización del estado S
+    S_new[idx] = S_val - dt * beta_val * I_val * S_val;
+    
+    // Actualización del estado I
+    float laplacian_I = (I_top + I_bottom + I_left + I_right - 4 * I_val);
+    
+    float s = D * dt / (d * d);
+    
+    float I_dx = ((A * wx[idx] + B * h_dx[idx]) > 0) ? (I_val - I_left) : (I_right - I_val);
+    float I_dy = ((A * wy[idx] + B * h_dy[idx]) > 0) ? (I_val - I_bottom) : (I_top - I_val);
+    
+    I_new[idx] = I_val + dt * (beta_val * I_val * S_val - gamma_val * I_val)
+                 + s * laplacian_I 
+                 - dt / d * ((A * wx[idx] + B * h_dx[idx]) * I_dx + (A * wy[idx] + B * h_dy[idx]) * I_dy);
+                 
+    // Actualización del estado R
+    R_new[idx] = R_val + dt * gamma_val * I_val;
+}
+'''
+
+mod = cp.RawModule(code=kernel_code)
+spread_kernel_raw = mod.get_function('spread_kernel_raw')
+
+def spread_infection_raw(S, I, R, S_new, I_new, R_new, 
+                         dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
+    
+    nx, ny = S.shape
+    threads = (16, 16)
+    blocks = ((ny + threads[0] - 1) // threads[0], (nx + threads[1] - 1) // threads[1])
+
+    # Llamar al kernel
+    spread_kernel_raw(
+        blocks, threads,
+        S, I, R, S_new, I_new, R_new, 
+        beta, gamma, 
+        cp.float32(dt), cp.float32(d), cp.float32(D),
+        wx, wy, 
+        h_dx, h_dy, 
+        cp.float32(A), cp.float32(B),
+        cp.int32(ny), cp.int32(nx)
+    )
+
+    # Borde = 0
+    S_new[0, :] = S_new[-1, :] = S_new[:, 0] = S_new[:, -1] = 0
+    I_new[0, :] = I_new[-1, :] = I_new[:, 0] = I_new[:, -1] = 0
+    R_new[0, :] = R_new[-1, :] = R_new[:, 0] = R_new[:, -1] = 0
+
+    # Celdas no combustibles
+    no_fuel = (beta == 0)
+    S_new[no_fuel] = 1
+    I_new[no_fuel] = 0
+    R_new[no_fuel] = 0
+
+
+
+############################## SPREAD INFECTION CON CUPY ###############################################
+
 def spread_infection_cupy(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     
     """
-
     La función actualiza el estado de una cuadrícula de vegetación susceptible (S), incendiándose (I) y quemada (R) 
     en función de varios parámetros que incluyen el tiempo, la velocidad del viento, la pendiente del terreno y 
     las constantes de propagación del fuego. Utiliza un esquema de diferencias finitas para modelar la difusión 
@@ -80,7 +174,6 @@ def spread_infection_cupy(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, w
       S_new: nuevos árboles susceptibles
       I_new: nuevos árboles quemándose
       R_new: nuevos árboles quemados
-
     """
 
     # Actualización del estado S
@@ -114,6 +207,8 @@ def spread_infection_cupy(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, w
     I_new[no_fuel] = 0
     R_new[no_fuel] = 0
 
+############################## SPREAD INFECTION CON NUMPY ###############################################
+
 def spread_infection_numpy(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     
     # Actualización del estado S
@@ -146,6 +241,7 @@ def spread_infection_numpy(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, 
     I_new[no_fuel] = 0
     R_new[no_fuel] = 0
 
+############################## CONDICIÓN DE COURANT ###############################################
 
 def courant(dt, D, A, B, d, wx, wy, h_dx, h_dy):
     
@@ -165,7 +261,6 @@ def courant(dt, D, A, B, d, wx, wy, h_dx, h_dy):
     
     Returns:
       bool: True si la condición de estabilidad de Courant se cumple, False en caso contrario.
-    
     '''
 
     # Courant para difusión
