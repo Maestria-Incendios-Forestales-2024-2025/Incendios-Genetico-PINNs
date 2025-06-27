@@ -1,5 +1,5 @@
 from math import sqrt
-from modelo_rdc import spread_infection_raw
+from modelo_rdc import spread_infection, spread_infection_raw
 import numpy as np 
 import cupy as cp # type: ignore
 
@@ -23,7 +23,6 @@ def leer_asc(ruta):
         # Leer el resto de los datos y convertirlos a una matriz
         data = np.loadtxt(f)  # Leer el archivo de datos en un array de numpy
         return cp.array(data, dtype=cp.float32)
-
 
 # Leer los mapas
 datos = [leer_asc(mapa) for mapa in ruta_mapas]

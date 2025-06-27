@@ -55,8 +55,9 @@ def spread_infection(S, I, R, S_new, I_new, R_new, dt, d, beta, gamma, D, wx, wy
 ############################## SPREAD INFECTION CON RAW KERNEL ###############################################
 
 kernel_code = r'''
-extern "C" __global__
-void spread_infection_kernel_raw(const float* S, const float* I, const float* R,
+extern "C" {
+
+__global__ void spread_infection_kernel_raw(const float* S, const float* I, const float* R,
                                   float* S_new, float* I_new, float* R_new,
                                   const float* beta, const float* gamma,
                                   const float dt, const float d, const float D, 
@@ -65,47 +66,68 @@ void spread_infection_kernel_raw(const float* S, const float* I, const float* R,
                                   const float A, const float B,
                                   const int ny, const int nx) 
 {
-    int i = blockIdx.y * blockDim.y + threadIdx.y;
-    int j = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    if (i <=0 || i >= nx - 1 || j <= 0 || j >= ny - 1)
-      return;
-      
-    int idx = i * ny + j;
-    int idx_top = (i - 1) * ny + j;
-    int idx_bottom = (i + 1) * ny + j;
-    int idx_left = i * ny + j - 1;
-    int idx_right = i * ny + j + 1;
-    
+    // Coordenadas (x = col, y = fila)
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= nx || y >= ny) return;
+
+    // Cálculo de índices lineales
+    int idx = y * nx + x; 
+    int idx_top = idx - nx; 
+    int idx_bottom = idx + nx;
+    int idx_left = idx - 1;
+    int idx_right = idx + 1;
+
+    // Valores actuales
     float S_val = S[idx];
     float I_val = I[idx];
     float R_val = R[idx];
-    
+
+    // Vecinos
     float I_top = I[idx_top];
     float I_bottom = I[idx_bottom];
     float I_left = I[idx_left];
     float I_right = I[idx_right];
-    
+
     float beta_val = beta[idx];
     float gamma_val = gamma[idx];
-    
-    // Actualización del estado S
-    S_new[idx] = S_val - dt * beta_val * I_val * S_val;
-    
-    // Actualización del estado I
-    float laplacian_I = (I_top + I_bottom + I_left + I_right - 4 * I_val);
-    
+
+    // Parámetros locales
+    float adv_x = A * wx[idx] + B * h_dx[idx];
+    float adv_y = A * wy[idx] + B * h_dy[idx];
+
+    float laplacian_I = I_top + I_bottom + I_left + I_right - 4.0f * I_val;
     float s = D * dt / (d * d);
-    
-    float I_dx = ((A * wx[idx] + B * h_dx[idx]) > 0) ? (I_val - I_left) : (I_right - I_val);
-    float I_dy = ((A * wy[idx] + B * h_dy[idx]) > 0) ? (I_val - I_bottom) : (I_top - I_val);
-    
+
+    float I_dx = (adv_x > 0.0f) ? (I_val - I_left) : (I_right - I_val);
+    float I_dy = (adv_y > 0.0f) ? (I_val - I_bottom) : (I_top - I_val);
+
+    // Actualización
+    S_new[idx] = S_val - dt * beta_val * I_val * S_val;
+
     I_new[idx] = I_val + dt * (beta_val * I_val * S_val - gamma_val * I_val)
-                 + s * laplacian_I 
-                 - dt / d * ((A * wx[idx] + B * h_dx[idx]) * I_dx + (A * wy[idx] + B * h_dy[idx]) * I_dy);
-                 
-    // Actualización del estado R
+                 + s * laplacian_I
+                 - dt / d * (adv_x * I_dx + adv_y * I_dy);
+
     R_new[idx] = R_val + dt * gamma_val * I_val;
+
+    // Celdas no combustibles
+    if (beta[idx] == 0.0f) {
+        S_new[idx] = 1.0f;
+        I_new[idx] = 0.0f;
+        R_new[idx] = 0.0f;
+        return;
+    }
+
+    // Bordes = 0
+    if (x == 0 || x == nx - 1 || y == 0 || y == ny - 1) {
+        S_new[idx] = 0.0f;
+        I_new[idx] = 0.0f;
+        R_new[idx] = 0.0f;
+        return;
+    }
+}
 }
 '''
 
@@ -115,7 +137,7 @@ spread_kernel_raw = mod.get_function('spread_infection_kernel_raw')
 def spread_infection_raw(S, I, R, S_new, I_new, R_new, 
                          dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     
-    nx, ny = S.shape
+    ny, nx = S.shape
     threads = (16, 16)
     blocks = ((ny + threads[0] - 1) // threads[0], (nx + threads[1] - 1) // threads[1])
 
@@ -130,19 +152,6 @@ def spread_infection_raw(S, I, R, S_new, I_new, R_new,
         cp.float32(A), cp.float32(B),
         cp.int32(ny), cp.int32(nx))
     )
-
-    # Borde = 0
-    S_new[0, :] = S_new[-1, :] = S_new[:, 0] = S_new[:, -1] = 0
-    I_new[0, :] = I_new[-1, :] = I_new[:, 0] = I_new[:, -1] = 0
-    R_new[0, :] = R_new[-1, :] = R_new[:, 0] = R_new[:, -1] = 0
-
-    # Celdas no combustibles
-    no_fuel = (beta == 0)
-    S_new[no_fuel] = 1
-    I_new[no_fuel] = 0
-    R_new[no_fuel] = 0
-
-
 
 ############################## SPREAD INFECTION CON CUPY ###############################################
 
