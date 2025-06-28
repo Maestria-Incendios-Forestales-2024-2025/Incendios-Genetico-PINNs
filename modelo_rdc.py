@@ -84,11 +84,22 @@ __global__ void spread_infection_kernel_raw(const float* S, const float* I, cons
     float I_val = I[idx];
     float R_val = R[idx];
 
-    // Vecinos
-    float I_top = I[idx_top];
-    float I_bottom = I[idx_bottom];
-    float I_left = I[idx_left];
-    float I_right = I[idx_right];
+    // Vecinos usando comportamiento circular (como cp.roll)
+    // cp.roll(I, -1, axis=0) -> I_top: desplaza filas hacia arriba, I_top[y,x] = I[y+1,x]
+    // cp.roll(I, 1, axis=0) -> I_bottom: desplaza filas hacia abajo, I_bottom[y,x] = I[y-1,x]
+    // cp.roll(I, 1, axis=1) -> I_left: desplaza columnas hacia derecha, I_left[y,x] = I[y,x-1]
+    // cp.roll(I, -1, axis=1) -> I_right: desplaza columnas hacia izquierda, I_right[y,x] = I[y,x+1]
+    
+    // Corregir el mapeo para que coincida con cp.roll
+    int top_y = (y == ny - 1) ? 0 : (y + 1);        // I_top[y,x] = I[y+1,x]
+    int bottom_y = (y == 0) ? (ny - 1) : (y - 1);   // I_bottom[y,x] = I[y-1,x]
+    int left_x = (x == 0) ? (nx - 1) : (x - 1);     // I_left[y,x] = I[y,x-1]
+    int right_x = (x == nx - 1) ? 0 : (x + 1);      // I_right[y,x] = I[y,x+1]
+    
+    float I_top = I[top_y * nx + x];
+    float I_bottom = I[bottom_y * nx + x];
+    float I_left = I[y * nx + left_x];
+    float I_right = I[y * nx + right_x];
 
     float beta_val = beta[idx];
     float gamma_val = gamma[idx];
@@ -103,30 +114,30 @@ __global__ void spread_infection_kernel_raw(const float* S, const float* I, cons
     float I_dx = (adv_x > 0.0f) ? (I_val - I_left) : (I_right - I_val);
     float I_dy = (adv_y > 0.0f) ? (I_val - I_bottom) : (I_top - I_val);
 
-    // Actualización
-    S_new[idx] = S_val - dt * beta_val * I_val * S_val;
+    // Primero calculamos valores normales para todas las celdas
+    float S_temp = S_val - dt * beta_val * I_val * S_val;
+    float I_temp = I_val + dt * (beta_val * I_val * S_val - gamma_val * I_val)
+                   + s * laplacian_I - dt / d * (adv_x * I_dx + adv_y * I_dy);
+    float R_temp = R_val + dt * gamma_val * I_val;
 
-    I_new[idx] = I_val + dt * (beta_val * I_val * S_val - gamma_val * I_val)
-                 + s * laplacian_I
-                 - dt / d * (adv_x * I_dx + adv_y * I_dy);
-
-    R_new[idx] = R_val + dt * gamma_val * I_val;
-
-    // Celdas no combustibles
-    if (beta[idx] == 0.0f) {
-        S_new[idx] = 1.0f;
-        I_new[idx] = 0.0f;
-        R_new[idx] = 0.0f;
-        return;
-    }
-
-    // Bordes = 0
+    // Aplicar condiciones de borde (PRIMERO, como en Python)
     if (x == 0 || x == nx - 1 || y == 0 || y == ny - 1) {
-        S_new[idx] = 0.0f;
-        I_new[idx] = 0.0f;
-        R_new[idx] = 0.0f;
-        return;
+        S_temp = 0.0f;
+        I_temp = 0.0f;
+        R_temp = 0.0f;
     }
+
+    // Aplicar celdas no combustibles (SEGUNDO, sobreescribe incluso bordes, como en Python)
+    if (beta[idx] == 0.0f) {
+        S_temp = 1.0f;
+        I_temp = 0.0f;
+        R_temp = 0.0f;
+    }
+
+    // Asignar valores finales
+    S_new[idx] = S_temp;
+    I_new[idx] = I_temp;
+    R_new[idx] = R_temp;
 }
 }
 '''
@@ -138,8 +149,8 @@ def spread_infection_raw(S, I, R, S_new, I_new, R_new,
                          dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
     
     ny, nx = S.shape
-    threads = (16, 16)
-    blocks = ((ny + threads[0] - 1) // threads[0], (nx + threads[1] - 1) // threads[1])
+    threads = (16, 16)  # (threads_x, threads_y)
+    blocks = ((nx + threads[0] - 1) // threads[0], (ny + threads[1] - 1) // threads[1])  # (blocks_x, blocks_y)
 
     # Llamar al kernel
     spread_kernel_raw(
