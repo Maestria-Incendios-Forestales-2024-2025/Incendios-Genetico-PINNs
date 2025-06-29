@@ -1,7 +1,12 @@
 import cupy as cp # type: ignore
-from modelo_rdc import spread_infection, courant
 from config import d, dt, num_steps
 from lectura_datos import preprocesar_datos
+import sys
+import os
+
+# Agrega el directorio padre al path para importar módulos
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from modelo_rdc import spread_infection_raw, courant
 
 ############################## CARGADO DE MAPAS ###############################################
 
@@ -58,7 +63,7 @@ def aptitud(D, A, B, x, y):
 
     # Iterar sobre las simulaciones
     for t in range(num_steps):
-        spread_infection(S=S_i, I=I_i, R=R_i, S_new=S_new_i, I_new=I_new_i, R_new=R_new_i, 
+        spread_infection_raw(S=S_i, I=I_i, R=R_i, S_new=S_new_i, I_new=I_new_i, R_new=R_new_i, 
                          dt=dt.astype(cp.float32), d=d.astype(cp.float32), beta=beta_veg, gamma=gamma, 
                          D=D.astype(cp.float32), wx=wx, wy=wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa, A=A.astype(cp.float32), B=B.astype(cp.float32))
         
