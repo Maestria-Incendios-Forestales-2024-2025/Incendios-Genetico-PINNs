@@ -7,14 +7,6 @@ def poblacion_inicial(tamano_poblacion, limite_parametros):
     poblacion = cp.array([cp.random.uniform(low, high, tamano_poblacion) for low, high in limite_parametros], dtype=cp.float32)
     return poblacion.T
 
-if __name__ == "__main__":
-    # Ejemplo de uso
-    tamano_poblacion = 10
-    limite_parametros = [(0, 200), (0, 100), (0, 100), (500, 900), (500, 900)]
-    poblacion = poblacion_inicial(tamano_poblacion, limite_parametros)
-    print("Población inicial:")
-    print(type(poblacion[0, 0]), poblacion[0, 0])  # Verifica el tipo de dato del primer elemento
-
 ############################## SELECCIÓN DE TORNEO ###############################################
 
 def tournament_selection(resultados, tournament_size=3):
