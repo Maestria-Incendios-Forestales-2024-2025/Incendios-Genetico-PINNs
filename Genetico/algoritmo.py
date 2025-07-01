@@ -1,8 +1,49 @@
 import cupy as cp  # type: ignore
 import csv
+import sys
+import os
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
 from fitness import aptitud
-import os
+from config import d, dt
+from lectura_datos import preprocesar_datos
+
+# Agregar el directorio padre al path para importar módulos
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from modelo_rdc import courant
+
+############################## CARGADO DE MAPAS ###############################################
+
+# Cargar datos necesarios para validación
+datos = preprocesar_datos()
+vegetacion = datos["vegetacion"]
+wx = datos["wx"]
+wy = datos["wy"]
+h_dx_mapa = datos["h_dx"]
+h_dy_mapa = datos["h_dy"]
+
+############################## CHEQUEO DE CONDICIÓN DE COURANT ###############################################
+
+def validate_courant_and_adjust(D, A, B):
+    """Valida la condición de Courant y ajusta parámetros si es necesario."""
+    while not courant(dt, D, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
+        param_to_modify = cp.random.choice(["D", "A", "B"])
+        
+        if param_to_modify == "D":
+            D = float(D * float(cp.random.uniform(0.8, 0.99)))
+        elif param_to_modify == "A":
+            A = float(A * float(cp.random.uniform(0.8, 0.99)))
+        elif param_to_modify == "B":
+            B = float(B * float(cp.random.uniform(0.8, 0.99)))
+    
+    return D, A, B
+
+############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
+
+def validate_ignition_point(x, y):
+    """Valida que el punto de ignición tenga combustible."""
+    while vegetacion[int(x), int(y)] <= 2:
+        x, y = float(cp.random.randint(500, 900)), float(cp.random.randint(500, 900))
+    return x, y
 
 ############################## ALGORITMO GENÉTICO #########################################################
 
@@ -23,8 +64,13 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros):
     for i, individuo in enumerate(combinaciones):
         D, A, B, x, y = individuo
         D, A, B, x, y = D.item(), A.item(), B.item(), int(x.item()), int(y.item())  # Convertir a tipos nativos de Python
+        
+        # Validar y ajustar parámetros antes de calcular fitness
+        D, A, B = validate_courant_and_adjust(D, A, B)
+        x, y = validate_ignition_point(x, y)
+        
         fitness = aptitud(D, A, B, x, y)
-        # print(f'Individuo {i+1}: D={D}, A={A}, B={B}, x={x}, y={y}, fitness={fitness}')
+        print(f'Individuo {i+1}: D={D}, A={A}, B={B}, x={x}, y={y}, fitness={fitness}')
         resultados.append({"D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness})
 
     #print(resultados)
@@ -50,8 +96,13 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros):
         for i, individuo in enumerate(population):
             D, A, B, x, y = individuo
             D, A, B, x, y = D.item(), A.item(), B.item(), int(x.item()), int(y.item())  # Convertir a tipos nativos de Python
+            
+            # Validar y ajustar parámetros antes de calcular fitness
+            D, A, B = validate_courant_and_adjust(D, A, B)
+            x, y = validate_ignition_point(x, y)
+            
             fitness = aptitud(D, A, B, x, y)
-            # print(f'Individuo {i+1}: D={D}, A={A}, B={B}, x={x}, y={y}, fitness={fitness}')
+            print(f'Individuo {i+1}: D={D}, A={A}, B={B}, x={x}, y={y}, fitness={fitness}')
             resultados.append({"D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness})
 
         peor_idx = max(range(len(resultados)), key=lambda i: resultados[i]["fitness"])

@@ -29,21 +29,8 @@ burnt_cells = cp.where(R_host > 0.5, 1, 0)
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS ###############################################
 
 def aptitud(D, A, B, x, y):
-    # Chequeo que se cumpla la condición de courant
-    while not courant(dt, D, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
-        # Seleccionar aleatoriamente qué parámetro reducir
-        param_to_modify = cp.random.choice(["D", "A", "B"])
-
-        if param_to_modify == "D":
-            D *= cp.random.uniform(0.8, 0.99)
-        elif param_to_modify == "A":
-            A *= cp.random.uniform(0.8, 0.99)
-        elif param_to_modify == "B":
-            B *= cp.random.uniform(0.8, 0.99)
-
-    while vegetacion[x, y] <= 2:
-        x, y = cp.random.randint(500, 900), cp.random.randint(500, 900)
-
+    # Los parámetros ya deben cumplir Courant y (x,y) debe ser un punto válido
+    
     # Población inicial de susceptibles e infectados
     S_i = cp.ones((ny, nx), dtype=cp.float32)  # Todos son susceptibles inicialmente
     I_i = cp.zeros((ny, nx), dtype=cp.float32) # Ningún infectado al principio
