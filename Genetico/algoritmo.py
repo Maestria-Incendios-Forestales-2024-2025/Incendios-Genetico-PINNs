@@ -51,10 +51,10 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros):
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
     
     # Obtener el task_id del SGE
-    task_id = os.environ.get('SGE_TASK_ID', 'default')
+    task_id = os.environ.get('JOB_ID', 'default')
     
     # Crear la carpeta de resultados con el task_id
-    resultados_dir = f'resultados/task_{task_id}'
+    resultados_dir = f'Genetico/resultados/task_{task_id}'
     os.makedirs(resultados_dir, exist_ok=True)
     
     combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
