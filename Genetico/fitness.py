@@ -24,7 +24,7 @@ ny, nx = datos["ny"], datos["nx"]
 ############################## INCENDIO DE REFERENCIA ###############################################
 
 R_host = cp.load("R_final.npy")
-burnt_cells = cp.where(R_host > 0.5, 1, 0)
+burnt_cells = cp.where(R_host > 0.001, 1, 0)
 
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS ###############################################
 
@@ -62,12 +62,15 @@ def aptitud(D, A, B, x, y):
         return float('inf') # Pasa a la siguiente combinación sin guardar resultados
 
     # Celdas quemadas en el incendio simulado: si R_i > 0.5 esa celda está quemada
-    burnt_cells_sim = cp.where(R_i > 0.5, 1, 0)
+    burnt_cells_sim = cp.where(R_i > 0.001, 1, 0)
 
     union = cp.sum((burnt_cells | burnt_cells_sim))  # Celdas quemadas en al menos un mapa (unión)
     interseccion = cp.sum((burnt_cells & burnt_cells_sim))
 
     # Calcular el fitness
     fitness = (union - interseccion) / cp.sum(burnt_cells)
+
+    print(f'fitness: {fitness}, D={D}, A={A}, B={B}, x={x}, y={y}')
+    print(f'Celdas quemadas: {cp.sum(burnt_cells)}, Celdas quemadas simuladas: {cp.sum(burnt_cells_sim)}')
 
     return fitness
