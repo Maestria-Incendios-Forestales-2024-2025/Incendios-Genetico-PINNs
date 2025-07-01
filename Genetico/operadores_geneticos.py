@@ -11,11 +11,8 @@ def poblacion_inicial(tamano_poblacion, limite_parametros):
 
 def tournament_selection(resultados, tournament_size=3):
     """Selecciona el individuo con mejor fitness dentro de un subconjunto aleatorio."""
-    # print(f"Seleccionando {tournament_size} individuos para el torneo...")
     selected = random.sample(resultados, tournament_size)
-    # print(f"Seleccionados para torneo: {[f'D={ind["D"]}, A={ind["A"]}, B={ind["B"]}, x={ind["x"]}, y={ind["y"]}, fitness={ind["fitness"]}' for ind in selected]}")
     best_individual = min(selected, key=lambda x: x["fitness"])
-    # print(f'Mejor individuo: D={best_individual["D"]}, A={best_individual["A"]}, B={best_individual["B"]}, x={best_individual["x"]}, y={best_individual["y"]}, fitness={best_individual["fitness"]}')
     D, A, B, x, y = best_individual["D"], best_individual["A"], best_individual["B"], best_individual['x'], best_individual['y']
     return cp.array([D, A, B, x, y])
 
