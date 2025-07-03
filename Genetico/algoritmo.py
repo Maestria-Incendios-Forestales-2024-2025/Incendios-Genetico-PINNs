@@ -5,7 +5,7 @@ import os
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
 from fitness import aptitud
 from config import d, dt
-from lectura_datos import preprocesar_datos
+from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada
 
 # Agregar el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -47,7 +47,7 @@ def validate_ignition_point(x, y):
 
 ############################## ALGORITMO GENÉTICO #########################################################
 
-def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros):
+def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo_preentrenado=None):
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
     
     # Obtener el task_id del SGE
@@ -57,7 +57,12 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros):
     resultados_dir = f'Genetico/resultados/task_{task_id}'
     os.makedirs(resultados_dir, exist_ok=True)
     
-    combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
+    # Cargar población inicial (preentrenada o nueva)
+    if archivo_preentrenado:
+        combinaciones = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros)
+    else:
+        combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
+
     mutation_rate = 0.3
 
     resultados = []
