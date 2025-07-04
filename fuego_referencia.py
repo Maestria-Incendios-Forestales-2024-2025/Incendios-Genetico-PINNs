@@ -47,7 +47,7 @@ D = cp.float32(50) # metros^2 / hora. Si la celda tiene 30 metros, en una hora a
 beta_veg = cp.where(vegetacion <= 2, 0, 0.1 * vegetacion) # fracción de vegetación incéndiandose por hora
 
 # Hacemos una máscara donde vegetación <=2, gamma >> 1/dt. Sino, vale 0.1. 
-gamma = cp.where(vegetacion <= 2, cp.float32(100), cp.float32(0.1)) # fracción de vegetación incéndiandose por hora.
+gamma = cp.where(vegetacion <= 2, cp.float32(100), cp.float32(0.1)) # fracción de vegetación que se apaga por hora.
                                                                     # 1/gamma es el tiempo promedio del incendio
 
 beta_veg = beta_veg.astype(cp.float32)
@@ -61,10 +61,10 @@ dt = cp.float32(1/6) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica 
 wx = (vientov * cp.cos(5/2 * cp.pi - vientod * cp.pi / 180) * 1000).astype(cp.float32)
 wy = (- vientov * cp.sin(5/2 * cp.pi - vientod * cp.pi / 180) * 1000).astype(cp.float32)
 
-# Constante A adimensional
+# Constante A adimensional de viento
 A = cp.float32(5e-4) # 10^-3 está al doble del límite de estabilidad
 
-# Constante B
+# Constante B de pendiente
 B = cp.float32(15) # m/h
 
 # Cálculo de la pendiente (usando mapas de pendiente y orientación)
