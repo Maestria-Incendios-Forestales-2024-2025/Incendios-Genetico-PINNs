@@ -14,9 +14,9 @@ h_dy_mapa = datos["h_dy"]
 
 ############################## CONDICIÓN DE COURANT PARA LOS TÉRMINOS DIFUSIVOS Y ADVECTIVOS ############
 
-D_max = d**2 / (2*dt)
-A_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(wx**2+wy**2)))
-B_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2)))
+D_max = d**2 / (2*dt) # constante de difusión
+A_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(wx**2+wy**2))) # constante de viento
+B_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2))) # contstante de pendiente
 
 ############################## EJECUCIÓN DEL ALGORITMO ###############################################
 
