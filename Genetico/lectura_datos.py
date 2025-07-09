@@ -11,7 +11,7 @@ def leer_asc(ruta):
         for i in range(6):  
             f.readline()
         data = np.loadtxt(f) 
-        return cp.array(data, dtype=cp.float32)
+        return cp.array(data, dtype=cp.float32) 
     
 ############################## CALCULO A PARTIR DE MAPAS ###############################################
 
@@ -74,10 +74,22 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
             for row in reader:
                 # Validar que todas las columnas necesarias existen
                 if all(key in row for key in ['D', 'A', 'B', 'x', 'y']):
-                    combinaciones_preentrenadas.append(
-                        cp.array([float(row['D']), float(row['A']), float(row['B']), 
-                                 int(row['x']), int(row['y'])])
-                    )
+                    try:
+                        # Convertir a float primero y luego a int para manejar valores como "732.0"
+                        x_val = int(float(row['x']))
+                        y_val = int(float(row['y']))
+                        
+                        # Debug temporal: verificar los primeros valores
+                        if len(combinaciones_preentrenadas) < 3:
+                            print(f"DEBUG: Cargando fila {len(combinaciones_preentrenadas)+1}: x={row['x']}→{x_val}, y={row['y']}→{y_val}")
+                        
+                        combinaciones_preentrenadas.append(
+                            cp.array([float(row['D']), float(row['A']), float(row['B']), 
+                                     x_val, y_val])
+                        )
+                    except (ValueError, TypeError) as e:
+                        print(f"WARNING: Saltando fila inválida: {row} - Error: {e}")
+                        continue
         
         # Verificar que se cargaron individuos
         if not combinaciones_preentrenadas:
