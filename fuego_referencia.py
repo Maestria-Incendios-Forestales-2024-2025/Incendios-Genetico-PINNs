@@ -58,8 +58,14 @@ dt = cp.float32(1/6) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica 
 # Transformación del viento a coordenadas cartesianas
 # El viento está medido en km/h. En m/h el viento es una cantidad enorme, por eso
 # la cantidad A que multiplica el viento tendría que ser pequeña. Intuición: A~10^-5
-wx = (vientov * cp.cos(5/2 * cp.pi - vientod * cp.pi / 180) * 1000).astype(cp.float32)
-wy = (- vientov * cp.sin(5/2 * cp.pi - vientod * cp.pi / 180) * 1000).astype(cp.float32)
+
+# Convertir a radianes
+vientod_rad = vientod * cp.pi / 180
+# Componentes cartesianas del viento:
+# wx: componente Este-Oeste (positivo hacia el Este)
+# wy: componente Norte-Sur (positivo hacia el Norte)
+wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
+wy = vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
 
 # Constante A adimensional de viento
 A = cp.float32(5e-4) # 10^-3 está al doble del límite de estabilidad
