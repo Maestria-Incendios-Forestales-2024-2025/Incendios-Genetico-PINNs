@@ -1,12 +1,12 @@
 import cupy as cp # type: ignore
 from config import d, dt, num_steps
-from lectura_datos import preprocesar_datos
+from lectura_datos import preprocesar_datos, leer_asc
 import sys
 import os
 
 # Agrega el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from modelo_rdc import spread_infection_raw, courant
+from modelo_rdc import spread_infection_raw
 
 ############################## CARGADO DE MAPAS ###############################################
 
@@ -16,16 +16,25 @@ wx = datos["wx"]
 wy = datos["wy"]
 h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
-vegetacion = datos["vegetacion"]
 beta_veg = datos["beta_veg"].astype(cp.float32)
 gamma = datos["gamma"].astype(cp.float32)
 ny, nx = datos["ny"], datos["nx"]
 
 ############################## INCENDIO DE REFERENCIA ###############################################
 
-R_host = cp.load("R_final.npy")
-burnt_cells = cp.where(R_host > 0.001, 1, 0)
+# Buscar el archivo area_quemada_SM.asc 
+ruta_area_quemada = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/area_quemada_SM.asc"
 
+R_host = None
+if os.path.exists(ruta_area_quemada):
+    print(f"🔍 Cargando mapa de referencia desde: {ruta_area_quemada}")
+    R_host = leer_asc(ruta_area_quemada)
+
+if R_host is None:
+    raise FileNotFoundError(f"❌ No se encontró area_quemada_SM.asc en ninguna de las rutas: {ruta_area_quemada}")
+
+# Crear máscara de celdas quemadas (umbral > 0.001 para considerar como quemada)
+burnt_cells = cp.where(R_host > 0.001, 1, 0)
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS ###############################################
 
 def aptitud(D, A, B, x, y):
