@@ -18,23 +18,14 @@ h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
 beta_veg = datos["beta_veg"].astype(cp.float32)
 gamma = datos["gamma"].astype(cp.float32)
+area_quemada = datos["area_quemada"]
 ny, nx = datos["ny"], datos["nx"]
 
 ############################## INCENDIO DE REFERENCIA ###############################################
 
-# Buscar el archivo area_quemada_SM.asc 
-ruta_area_quemada = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/area_quemada_SM.asc"
+area_quemada = datos["area_quemada"]
+burnt_cells = cp.where(area_quemada > 0.001, 1, 0)  # Celdas quemadas en el mapa de referencia
 
-R_host = None
-if os.path.exists(ruta_area_quemada):
-    print(f"🔍 Cargando mapa de referencia desde: {ruta_area_quemada}")
-    R_host = leer_asc(ruta_area_quemada)
-
-if R_host is None:
-    raise FileNotFoundError(f"❌ No se encontró area_quemada_SM.asc en ninguna de las rutas: {ruta_area_quemada}")
-
-# Crear máscara de celdas quemadas (umbral > 0.001 para considerar como quemada)
-burnt_cells = cp.where(R_host > 0.001, 1, 0)
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS ###############################################
 
 def aptitud(D, A, B, x, y):
