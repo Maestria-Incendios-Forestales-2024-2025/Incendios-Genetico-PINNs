@@ -64,63 +64,54 @@ __global__ void spread_infection_kernel_raw(const float* S, const float* I, cons
                                   const float* wx, const float* wy,
                                   const float* h_dx, const float* h_dy,
                                   const float A, const float B,
-                                  const int ny, const int nx) 
+                                  const int ny, const int nx, const int n_batch) 
 {
-    // Coordenadas del hilo
-    int j = blockIdx.x * blockDim.x + threadIdx.x;  // columna (x)
-    int i = blockIdx.y * blockDim.y + threadIdx.y;  // fila (y)
+    int j = blockIdx.x * blockDim.x + threadIdx.x;  // x
+    int i = blockIdx.y * blockDim.y + threadIdx.y;  // y
+    int b = blockIdx.z;                             // batch_id
 
-    if (i >= ny || j >= nx) return;
+    if (i >= ny || j >= nx || b >= n_batch) return;
 
-    int idx = i * nx + j;
-    
-    // Verificar si estamos en el borde
+    int idx2D = i * nx + j;
+    int idx = b * ny * nx + idx2D;
+
     if (i == 0 || i == ny-1 || j == 0 || j == nx-1) {
-        // Condiciones de borde Dirichlet
         S_new[idx] = 0.0f;
         I_new[idx] = 0.0f;
         R_new[idx] = 0.0f;
         return;
     }
-    
-    // Celdas interiores: usar diferencias finitas explícitas
+
     float S_val = S[idx];
     float I_val = I[idx];
     float R_val = R[idx];
     float beta_val = beta[idx];
     float gamma_val = gamma[idx];
-    
-    // Acceso a vecinos (sin periodicidad)
-    float I_top = I[(i+1) * nx + j];      // i+1, j
-    float I_bottom = I[(i-1) * nx + j];   // i-1, j
-    float I_left = I[i * nx + (j-1)];     // i, j-1
-    float I_right = I[i * nx + (j+1)];    // i, j+1
-    
-    // Laplaciano
+
+    float I_top    = I[b * ny * nx + (i+1)*nx + j];
+    float I_bottom = I[b * ny * nx + (i-1)*nx + j];
+    float I_left   = I[b * ny * nx + i*nx + (j-1)];
+    float I_right  = I[b * ny * nx + i*nx + (j+1)];
+
     float laplacian_I = I_top + I_bottom + I_left + I_right - 4.0f * I_val;
     float s = D * dt / (d * d);
-    
-    // Términos de advección
+
     float adv_x = A * wx[idx] + B * h_dx[idx];
     float adv_y = A * wy[idx] + B * h_dy[idx];
-    
-    // Esquema upwind
+
     float I_dx = (adv_x > 0.0f) ? (I_val - I_left) : (I_right - I_val);
     float I_dy = (adv_y > 0.0f) ? (I_val - I_bottom) : (I_top - I_val);
-    
-    // Actualización temporal
+
     float S_temp = S_val - dt * beta_val * I_val * S_val;
     float I_temp = I_val + dt * (beta_val * I_val * S_val - gamma_val * I_val)
                    + s * laplacian_I - dt / d * (adv_x * I_dx + adv_y * I_dy);
     float R_temp = R_val + dt * gamma_val * I_val;
-    
-    // Verificar celdas no combustibles
+
     if (beta_val == 0.0f) {
         S_temp = 1.0f;
         I_temp = 0.0f;
     }
-    
-    // Escribir resultados
+
     S_new[idx] = S_temp;
     I_new[idx] = I_temp;
     R_new[idx] = R_temp;
@@ -132,22 +123,26 @@ mod = cp.RawModule(code=kernel_code)
 spread_kernel_raw = mod.get_function('spread_infection_kernel_raw')
 
 def spread_infection_raw(S, I, R, S_new, I_new, R_new, 
-                         dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
-    
-    ny, nx = S.shape
-    threads = (16, 16)  # (threads_x, threads_y)
-    blocks = ((nx + threads[0] - 1) // threads[0], (ny + threads[1] - 1) // threads[1])  # (blocks_x, blocks_y)
+                                dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
 
-    # Llamar al kernel
+    n_batch, ny, nx = S.shape
+    threads = (16, 16)
+    blocks_x = (nx + threads[0] - 1) // threads[0]
+    blocks_y = (ny + threads[1] - 1) // threads[1]
+    blocks = (blocks_x, blocks_y, n_batch)
+
     spread_kernel_raw(
         blocks, threads,
-        (S, I, R, S_new, I_new, R_new, 
-        beta, gamma, 
-        cp.float32(dt), cp.float32(d), cp.float32(D),
-        wx, wy, 
-        h_dx, h_dy, 
-        cp.float32(A), cp.float32(B),
-        cp.int32(ny), cp.int32(nx))
+        (
+            S.ravel(), I.ravel(), R.ravel(),
+            S_new.ravel(), I_new.ravel(), R_new.ravel(),
+            beta.ravel(), gamma.ravel(),
+            cp.float32(dt), cp.float32(d), cp.float32(D),
+            wx.ravel(), wy.ravel(),
+            h_dx.ravel(), h_dy.ravel(),
+            cp.float32(A), cp.float32(B),
+            cp.int32(ny), cp.int32(nx), cp.int32(n_batch)
+        )
     )
 
 ############################## SPREAD INFECTION CON CUPY ###############################################
