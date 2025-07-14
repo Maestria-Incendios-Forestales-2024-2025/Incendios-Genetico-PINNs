@@ -16,7 +16,7 @@ ruta_mapas = ['c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Te
 def leer_asc(ruta):
     with open(ruta, 'r') as f:
         # Leer el encabezado para obtener el tamaño de la grilla
-        for i in range(6):  # Las primeras 6 líneas suelen contener los metadatos
+        for _ in range(6):  # Las primeras 6 líneas suelen contener los metadatos
             f.readline()
         
         # Leer el resto de los datos y convertirlos a una matriz
@@ -26,12 +26,12 @@ def leer_asc(ruta):
 # Leer los mapas
 datos = [leer_asc(mapa) for mapa in ruta_mapas]
 
-# Asignar cada matriz a una variable
-vientod = datos[0]
-vientov = datos[1]
-pendiente = datos[2]
-vegetacion = datos[3]
-orientacion = datos[4]
+# Asignar cada matriz a una variable (e invertir verticalmente)
+vientod = cp.flipud(datos[0])
+vientov = cp.flipud(datos[1])
+pendiente = cp.flipud(datos[2])
+vegetacion = cp.flipud(datos[3])
+orientacion = cp.flipud(datos[4])
 
 # Obtener dimensiones del mapa
 ny, nx = vegetacion.shape  # Usamos cualquier mapa para obtener las dimensiones
@@ -65,7 +65,7 @@ vientod_rad = vientod * cp.pi / 180
 # wx: componente Este-Oeste (positivo hacia el Este)
 # wy: componente Norte-Sur (positivo hacia el Norte)
 wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
-wy = vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
+wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
 
 # Constante A adimensional de viento
 A = cp.float32(5e-4) # 10^-3 está al doble del límite de estabilidad
@@ -85,8 +85,8 @@ I = cp.zeros((ny, nx), dtype=cp.float32) # Ningún infectado al principio
 R = cp.zeros((ny, nx), dtype=cp.float32)
 
 # Infectados en una esquina de la grilla
-S[700, 700] = 0
-I[700, 700] = 1
+S[300, 700] = 0
+I[300, 700] = 1
 
 var_poblacion = 0
 
