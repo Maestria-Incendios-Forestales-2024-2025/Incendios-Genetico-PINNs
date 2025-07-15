@@ -60,10 +60,10 @@ extern "C" {
 __global__ void spread_infection_kernel_raw(const float* S, const float* I, const float* R,
                                   float* S_new, float* I_new, float* R_new,
                                   const float* beta, const float* gamma,
-                                  const float dt, const float d, const float D, 
+                                  const float dt, const float d, const float* D, 
                                   const float* wx, const float* wy,
                                   const float* h_dx, const float* h_dy,
-                                  const float A, const float B,
+                                  const float* A, const float* B,
                                   const int ny, const int nx, const int n_batch) 
 {
     int j = blockIdx.x * blockDim.x + threadIdx.x;  // x
@@ -94,10 +94,10 @@ __global__ void spread_infection_kernel_raw(const float* S, const float* I, cons
     float I_right  = I[b * ny * nx + i*nx + (j+1)];
 
     float laplacian_I = I_top + I_bottom + I_left + I_right - 4.0f * I_val;
-    float s = D * dt / (d * d);
+    float s = D[b] * dt / (d * d);
 
-    float adv_x = A * wx[idx] + B * h_dx[idx];
-    float adv_y = A * wy[idx] + B * h_dy[idx];
+    float adv_x = A[b] * wx[idx] + B[b] * h_dx[idx];
+    float adv_y = A[b] * wy[idx] + B[b] * h_dy[idx];
 
     float I_dx = (adv_x > 0.0f) ? (I_val - I_left) : (I_right - I_val);
     float I_dy = (adv_y > 0.0f) ? (I_val - I_bottom) : (I_top - I_val);
@@ -137,10 +137,10 @@ def spread_infection_raw(S, I, R, S_new, I_new, R_new,
             S.ravel(), I.ravel(), R.ravel(),
             S_new.ravel(), I_new.ravel(), R_new.ravel(),
             beta.ravel(), gamma.ravel(),
-            cp.float32(dt), cp.float32(d), cp.float32(D),
+            cp.float32(dt), cp.float32(d), D.ravel(),
             wx.ravel(), wy.ravel(),
             h_dx.ravel(), h_dy.ravel(),
-            cp.float32(A), cp.float32(B),
+            A.ravel(), B.ravel(),
             cp.int32(ny), cp.int32(nx), cp.int32(n_batch)
         )
     )

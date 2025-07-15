@@ -60,8 +60,8 @@ def aptitud_batch(parametros_batch):
     I_new_batch = cp.empty_like(I_batch)
     R_new_batch = cp.empty_like(R_batch)
     
-    # Expandir arrays de parámetros para el batch
-    beta_veg_batch = cp.broadcast_to(beta_veg, (batch_size, ny, nx))
+    # Expandir arrays de parámetros para el batch (broadcast_to hace una copia eficiente)
+    beta_veg_batch = cp.broadcast_to(beta_veg, (batch_size, ny, nx)) 
     gamma_batch = cp.broadcast_to(gamma, (batch_size, ny, nx))
     wx_batch = cp.broadcast_to(wx, (batch_size, ny, nx))
     wy_batch = cp.broadcast_to(wy, (batch_size, ny, nx))
@@ -70,9 +70,9 @@ def aptitud_batch(parametros_batch):
     
     # Crear arrays de parámetros D, A, B para cada simulación
     D_batch = cp.array([param[0] for param in parametros_batch], dtype=cp.float32)
-    A_batch = cp.array([param[3] for param in parametros_batch], dtype=cp.float32)  # A es el índice 3
-    B_batch = cp.array([param[4] for param in parametros_batch], dtype=cp.float32)  # B es el índice 4
-    
+    A_batch = cp.array([param[1] for param in parametros_batch], dtype=cp.float32)  # A es el índice 3
+    B_batch = cp.array([param[2] for param in parametros_batch], dtype=cp.float32)  # B es el índice 4
+
     # Simular en paralelo
     simulaciones_validas = cp.ones(batch_size, dtype=cp.bool_)
     
