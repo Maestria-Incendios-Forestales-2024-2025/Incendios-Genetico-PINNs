@@ -8,6 +8,11 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modelo_rdc import spread_infection_raw
 
+############################## FUNCIÓN PARA AGREGAR UNA DIMENSIÓN ###############################################
+
+def ensure_batch_dim(*arrays):
+    return [arr if arr.ndim == 3 else arr[cp.newaxis, ...] for arr in arrays]
+
 ############################## CARGADO DE MAPAS ###############################################
 
 datos = preprocesar_datos()
@@ -28,49 +33,106 @@ burnt_cells = cp.where(area_quemada > 0.001, 1, 0)  # Celdas quemadas en el mapa
 
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS ###############################################
 
-def aptitud(D, A, B, x, y):
-    # Los parámetros ya deben cumplir Courant y (x,y) debe ser un punto válido
+def aptitud_batch(parametros_batch):
+    """
+    Calcula el fitness para múltiples combinaciones de parámetros en paralelo.
     
-    # Población inicial de susceptibles e infectados
-    S_i = cp.ones((ny, nx), dtype=cp.float32)  # Todos son susceptibles inicialmente
-    I_i = cp.zeros((ny, nx), dtype=cp.float32) # Ningún infectado al principio
-    R_i = cp.zeros((ny, nx), dtype=cp.float32)
-
-    # Si hay combustible, encender fuego
-    S_i[x, y] = 0
-    I_i[x, y] = 1
-
-    S_new_i = cp.empty_like(S_i)
-    I_new_i = cp.empty_like(I_i)
-    R_new_i = cp.empty_like(R_i)
-
-    # Iterar sobre las simulaciones
+    Args:
+        parametros_batch: Lista de tuplas (D, A, B, x, y)
+    
+    Returns:
+        Lista de valores de fitness
+    """
+    batch_size = len(parametros_batch)
+    
+    # Inicializar arrays para el batch
+    S_batch = cp.ones((batch_size, ny, nx), dtype=cp.float32)
+    I_batch = cp.zeros((batch_size, ny, nx), dtype=cp.float32)
+    R_batch = cp.zeros((batch_size, ny, nx), dtype=cp.float32)
+    
+    # Configurar puntos de ignición para cada simulación
+    for i, (D, A, B, x, y) in enumerate(parametros_batch):
+        S_batch[i, y, x] = 0
+        I_batch[i, y, x] = 1
+    
+    # Arrays para los nuevos estados
+    S_new_batch = cp.empty_like(S_batch)
+    I_new_batch = cp.empty_like(I_batch)
+    R_new_batch = cp.empty_like(R_batch)
+    
+    # Expandir arrays de parámetros para el batch
+    beta_veg_batch = cp.broadcast_to(beta_veg, (batch_size, ny, nx))
+    gamma_batch = cp.broadcast_to(gamma, (batch_size, ny, nx))
+    wx_batch = cp.broadcast_to(wx, (batch_size, ny, nx))
+    wy_batch = cp.broadcast_to(wy, (batch_size, ny, nx))
+    h_dx_batch = cp.broadcast_to(h_dx_mapa, (batch_size, ny, nx))
+    h_dy_batch = cp.broadcast_to(h_dy_mapa, (batch_size, ny, nx))
+    
+    # Crear arrays de parámetros D, A, B para cada simulación
+    D_batch = cp.array([param[0] for param in parametros_batch], dtype=cp.float32)
+    A_batch = cp.array([param[3] for param in parametros_batch], dtype=cp.float32)  # A es el índice 3
+    B_batch = cp.array([param[4] for param in parametros_batch], dtype=cp.float32)  # B es el índice 4
+    
+    # Simular en paralelo
+    simulaciones_validas = cp.ones(batch_size, dtype=cp.bool_)
+    
     for t in range(num_steps):
-        spread_infection_raw(S=S_i, I=I_i, R=R_i, S_new=S_new_i, I_new=I_new_i, R_new=R_new_i, 
-                         dt=dt, d=d, beta=beta_veg, gamma=gamma, 
-                         D=D, wx=wx, wy=wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa, A=A, B=B)
+        # Llamar al kernel con todos los parámetros necesarios
+        spread_infection_raw(
+            S=S_batch, I=I_batch, R=R_batch, 
+            S_new=S_new_batch, I_new=I_new_batch, R_new=R_new_batch,
+            dt=dt, d=d, beta=beta_veg_batch, gamma=gamma_batch,
+            D=D_batch, wx=wx_batch, wy=wy_batch, 
+            h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch
+        )
         
-        S_i, S_new_i = S_new_i, S_i
-        I_i, I_new_i = I_new_i, I_i
-        R_i, R_new_i = R_new_i, R_i
-
-        # Esto va a decir si la simulación explota o no
-        if not (cp.all((R_i >= 0) & (R_i <= 1))):
+        # Intercambiar arrays
+        S_batch, S_new_batch = S_new_batch, S_batch
+        I_batch, I_new_batch = I_new_batch, I_batch
+        R_batch, R_new_batch = R_new_batch, R_batch
+        
+        # Verificar si alguna simulación explota
+        validas = cp.all((R_batch >= 0) & (R_batch <= 1), axis=(1, 2))
+        simulaciones_validas &= validas
+        
+        # Si todas las simulaciones explotaron, terminar
+        if not cp.any(simulaciones_validas):
             break
+    
+    # Calcular fitness para cada simulación en paralelo
+    fitness_values = []
+    
+    # Crear máscaras para celdas quemadas (todo el batch de una vez)
+    burnt_cells_sim_batch = cp.where(R_batch > 0.001, 1, 0)  # Shape: (batch_size, ny, nx)
+    
+    # Expandir burnt_cells para el batch
+    burnt_cells_expanded = cp.broadcast_to(burnt_cells[cp.newaxis, :, :], (batch_size, ny, nx))
+    
+    # Calcular unión e intersección para todo el batch
+    union_batch = cp.sum(burnt_cells_expanded | burnt_cells_sim_batch, axis=(1, 2))  # Shape: (batch_size,)
+    interseccion_batch = cp.sum(burnt_cells_expanded & burnt_cells_sim_batch, axis=(1, 2))  # Shape: (batch_size,)
+    
+    # Calcular fitness para todo el batch
+    burnt_cells_total = cp.sum(burnt_cells)
+    fitness_batch = (union_batch - interseccion_batch) / burnt_cells_total
+    
+    # Procesar resultados
+    for i in range(batch_size):
+        if not simulaciones_validas[i]:
+            fitness_values.append(float('inf'))
+        else:
+            fitness_values.append(float(fitness_batch[i]))
+        
+        # Información de debug
+        D, A, B, x, y = parametros_batch[i]
+        if simulaciones_validas[i]:
+            print(f'Sim {i}: fitness={fitness_batch[i]:.4f}, D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}')
+            print(f'  Celdas quemadas: {burnt_cells_total}, Simuladas: {cp.sum(burnt_cells_sim_batch[i])}')
+        else:
+            print(f'Sim {i}: fitness=inf (simulación explotó), D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}')
+    
+    return fitness_values
 
-    if not cp.all((R_i >= 0) & (R_i <= 1)):
-        return float('inf') # Pasa a la siguiente combinación sin guardar resultados
-
-    # Celdas quemadas en el incendio simulado: si R_i > 0.5 esa celda está quemada
-    burnt_cells_sim = cp.where(R_i > 0.001, 1, 0)
-
-    union = cp.sum((burnt_cells | burnt_cells_sim))  # Celdas quemadas en al menos un mapa (unión)
-    interseccion = cp.sum((burnt_cells & burnt_cells_sim))
-
-    # Calcular el fitness
-    fitness = (union - interseccion) / cp.sum(burnt_cells)
-
-    print(f'fitness: {fitness}, D={D}, A={A}, B={B}, x={x}, y={y}')
-    print(f'Celdas quemadas: {cp.sum(burnt_cells)}, Celdas quemadas simuladas: {cp.sum(burnt_cells_sim)}')
-
-    return fitness
+def aptitud(D, A, B, x, y):
+    """Función de aptitud para un solo incendio (mantener compatibilidad)."""
+    return aptitud_batch([(D, A, B, x, y)])[0]

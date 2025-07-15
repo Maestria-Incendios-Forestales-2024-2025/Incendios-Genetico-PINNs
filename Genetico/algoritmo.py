@@ -3,7 +3,7 @@ import csv
 import sys
 import os
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
-from fitness import aptitud
+from fitness import aptitud, aptitud_batch
 from config import d, dt
 from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada
 
@@ -20,6 +20,7 @@ wx = datos["wx"]
 wy = datos["wy"]
 h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
+area_quemada = datos["area_quemada"]
 
 ############################## CHEQUEO DE CONDICIÓN DE COURANT ###############################################
 
@@ -37,17 +38,60 @@ def validate_courant_and_adjust(D, A, B):
     
     return D, A, B
 
+############################## PROCESAMIENTO EN BATCH ###############################################
+
+def procesar_poblacion_batch(poblacion, batch_size=10):
+    """
+    Procesa una población en batches para aprovechar el paralelismo.
+    
+    Args:
+        poblacion: Lista de individuos (D, A, B, x, y)
+        batch_size: Tamaño del batch para procesamiento en paralelo
+    
+    Returns:
+        Lista de resultados con fitness calculado
+    """
+    resultados = []
+    
+    for i in range(0, len(poblacion), batch_size):
+        batch = poblacion[i:i+batch_size]
+        
+        # Preparar parámetros para el batch
+        parametros_batch = []
+        for individuo in batch:
+            D, A, B, x, y = individuo
+            D, A, B, x, y = D.item(), A.item(), B.item(), int(x.item()), int(y.item())
+            
+            # Validar y ajustar parámetros
+            D, A, B = validate_courant_and_adjust(D, A, B)
+            x, y = validate_ignition_point(x, y)
+            
+            parametros_batch.append((D, A, B, x, y))
+        
+        # Calcular fitness en batch
+        fitness_values = aptitud_batch(parametros_batch)
+        
+        # Agregar resultados
+        for j, (params, fitness) in enumerate(zip(parametros_batch, fitness_values)):
+            D, A, B, x, y = params
+            resultados.append({
+                "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness
+            })
+            print(f'Individuo {i+j+1}: D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}, fitness={fitness:.4f}')
+    
+    return resultados
+
 ############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
 
 def validate_ignition_point(x, y):
     """Valida que el punto de ignición tenga combustible."""
-    while vegetacion[int(x), int(y)] <= 2:
-        x, y = float(cp.random.randint(500, 900)), float(cp.random.randint(500, 900))
+    while vegetacion[int(y), int(x)] <= 2 and area_quemada[int(y), int(x)] <= 0.001:
+        x, y = float(cp.random.randint(300, 720)), float(cp.random.randint(400, 800))
     return x, y
 
 ############################## ALGORITMO GENÉTICO #########################################################
 
-def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo_preentrenado=None):
+def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo_preentrenado=None, batch_size=10):
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
     
     # Obtener el task_id del SGE
@@ -65,20 +109,10 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo
 
     mutation_rate = 0.3
 
-    resultados = []
-    for i, individuo in enumerate(combinaciones):
-        D, A, B, x, y = individuo
-        D, A, B, x, y = D.item(), A.item(), B.item(), int(x.item()), int(y.item())  # Convertir a tipos nativos de Python
-        
-        # Validar y ajustar parámetros antes de calcular fitness
-        D, A, B = validate_courant_and_adjust(D, A, B)
-        x, y = validate_ignition_point(x, y)
-        
-        fitness = aptitud(D, A, B, x, y)
-        print(f'Individuo {i+1}: D={D}, A={A}, B={B}, x={x}, y={y}, fitness={fitness}')
-        resultados.append({"D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness})
+    # Procesar población inicial en batch
+    print("Procesando población inicial en batch...")
+    resultados = procesar_poblacion_batch(combinaciones, batch_size)
 
-    #print(resultados)
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 
     for gen in range(generaciones):
@@ -97,18 +131,10 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo
             new_population.extend([child1, child2]) # Estos hijos pasan a formar parte de la nueva población
 
         population = cp.array(new_population)
-        resultados = []
-        for i, individuo in enumerate(population):
-            D, A, B, x, y = individuo
-            D, A, B, x, y = D.item(), A.item(), B.item(), int(x.item()), int(y.item())  # Convertir a tipos nativos de Python
-            
-            # Validar y ajustar parámetros antes de calcular fitness
-            D, A, B = validate_courant_and_adjust(D, A, B)
-            x, y = validate_ignition_point(x, y)
-            
-            fitness = aptitud(D, A, B, x, y)
-            print(f'Individuo {i+1}: D={D}, A={A}, B={B}, x={x}, y={y}, fitness={fitness}')
-            resultados.append({"D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness})
+        
+        # Procesar nueva población en batch
+        print(f"Procesando generación {gen+1} en batch...")
+        resultados = procesar_poblacion_batch(population, batch_size)
 
         peor_idx = max(range(len(resultados)), key=lambda i: resultados[i]["fitness"])
         resultados[peor_idx] = elite  # Mantener el mejor individuo de la generación anterior
