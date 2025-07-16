@@ -78,6 +78,10 @@ A = cp.float32(1e-4) # 10^-3 está al doble del límite de estabilidad
 # Constante B de pendiente
 B = cp.float32(15) # m/h
 
+D = cp.asarray(D, dtype=cp.float32).reshape(1)
+A = cp.asarray(A, dtype=cp.float32).reshape(1)
+B = cp.asarray(B, dtype=cp.float32).reshape(1)
+
 # Cálculo de la pendiente (usando mapas de pendiente y orientación)
 h_dx_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
 h_dy_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
