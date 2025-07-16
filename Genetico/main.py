@@ -28,20 +28,11 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 # Ejecutar el GA con procesamiento en batch
-resultados = genetic_algorithm(tamano_poblacion=10, generaciones=1, limite_parametros=limite_parametros, batch_size=5)
+resultados = genetic_algorithm(tamano_poblacion=10, generaciones=0, limite_parametros=limite_parametros, batch_size=2)
 
 # Sincronizar después de completar la ejecución
 cp.cuda.Stream.null.synchronize()
 end_time = time.time()
 
 print(f"Tiempo de ejecución en GPU: {end_time - start_time} segundos")
-
-# Guardar los resultados en un archivo CSV
-with open('resultados_genetico.csv', 'w', newline='') as csvfile:
-    fieldnames = ['D', 'A', 'B', 'x', 'y', 'fitness']
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-    writer.writeheader()
-    for resultado in resultados:
-        writer.writerow(resultado)
 
