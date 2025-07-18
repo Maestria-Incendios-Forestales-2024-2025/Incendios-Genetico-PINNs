@@ -3,7 +3,7 @@ import csv
 import sys
 import os
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
-from fitness import aptitud, aptitud_batch
+from fitness import aptitud_batch
 from config import d, dt
 from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada
 
@@ -26,16 +26,24 @@ area_quemada = datos["area_quemada"]
 
 def validate_courant_and_adjust(D, A, B):
     """Valida la condición de Courant y ajusta parámetros si es necesario."""
-    while not courant(dt, D, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
-        param_to_modify = cp.random.choice(["D", "A", "B"])
-        
-        if param_to_modify == "D":
-            D = float(D * float(cp.random.uniform(0.8, 0.99)))
-        elif param_to_modify == "A":
-            A = float(A * float(cp.random.uniform(0.8, 0.99)))
-        elif param_to_modify == "B":
-            B = float(B * float(cp.random.uniform(0.8, 0.99)))
     
+    iteraciones = 0
+    while not courant(dt, D, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
+        iteraciones += 1
+        # Alternativa más eficiente: seleccionar aleatoriamente entre 0, 1, 2
+        param_idx = int(cp.random.randint(0, 3))  # 0, 1, o 2
+        
+        if param_idx == 0:  # D
+            D = float(D * float(cp.random.uniform(0.8, 0.99)))
+        elif param_idx == 1:  # A
+            A = float(A * float(cp.random.uniform(0.8, 0.99)))
+        elif param_idx == 2:  # B
+            B = float(B * float(cp.random.uniform(0.8, 0.99)))
+        
+        # Evitar bucles infinitos
+        if iteraciones > 100:
+            print(f"Warning: Validación Courant tomó {iteraciones} iteraciones")
+            break
     return D, A, B
 
 ############################## PROCESAMIENTO EN BATCH ###############################################
@@ -50,34 +58,50 @@ def procesar_poblacion_batch(poblacion, batch_size=10):
     
     Returns:
         Lista de resultados con fitness calculado
-    """
+    """  
     resultados = []
     
     for i in range(0, len(poblacion), batch_size):
         batch = poblacion[i:i+batch_size]
         
+        print(f'Procesando batch {i//batch_size + 1} de {len(poblacion) // batch_size}...')
+        
         # Preparar parámetros para el batch
         parametros_batch = []
         for individuo in batch:
-            D, A, B, x, y = individuo
-            D, A, B, x, y = D.item(), A.item(), B.item(), int(x.item()), int(y.item())
+            D, A, B, x, y = individuo[:5]
+            betas = individuo[5:10]  # beta_veg
+            gammas = individuo[10:15]  # gamma
             
+            D, A, B, x, y = D.item(), A.item(), B.item(), int(x.item()), int(y.item())
+            betas = betas.tolist()
+            gammas = gammas.tolist()
+
+            parametros_batch.append((D, A, B, x, y, betas, gammas))
+        
+        # Validar parámetros
+        parametros_validados = []
+        for D, A, B, x, y, betas, gammas in parametros_batch:
             # Validar y ajustar parámetros
             D, A, B = validate_courant_and_adjust(D, A, B)
             x, y = validate_ignition_point(x, y)
-            
-            parametros_batch.append((D, A, B, x, y))
+            parametros_validados.append((D, A, B, x, y, betas, gammas))
         
         # Calcular fitness en batch
-        fitness_values = aptitud_batch(parametros_batch)
+        fitness_values = aptitud_batch(parametros_validados)
         
         # Agregar resultados
-        for j, (params, fitness) in enumerate(zip(parametros_batch, fitness_values)):
-            D, A, B, x, y = params
+        for j, (params, fitness) in enumerate(zip(parametros_validados, fitness_values)):
+            D, A, B, x, y, betas, gammas = params
             resultados.append({
-                "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness
+                "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness,
+                "betas": betas, "gammas": gammas
             })
-            print(f'Individuo {i+j+1}: D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}, fitness={fitness:.4f}')
+            print(
+                f'Individuo {i+j+1}: D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}, '
+                f'beta={[f"{b:.3f}" for b in betas]}, gamma={[f"{g:.3f}" for g in gammas]}, '
+                f'fitness={fitness:.4f}'
+            )
     
     return resultados
 
@@ -85,8 +109,17 @@ def procesar_poblacion_batch(poblacion, batch_size=10):
 
 def validate_ignition_point(x, y):
     """Valida que el punto de ignición tenga combustible."""
+    
+    iteraciones = 0
     while vegetacion[int(y), int(x)] <= 2 and area_quemada[int(y), int(x)] <= 0.001:
+        iteraciones += 1
         x, y = float(cp.random.randint(300, 720)), float(cp.random.randint(400, 800))
+        
+        # Evitar bucles infinitos
+        if iteraciones > 100:
+            print(f"Warning: Validación punto de ignición tomó {iteraciones} iteraciones")
+            break
+        
     return x, y
 
 ############################## ALGORITMO GENÉTICO #########################################################
@@ -100,6 +133,8 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo
     # Crear la carpeta de resultados con el task_id
     resultados_dir = f'Genetico/resultados/task_{task_id}'
     os.makedirs(resultados_dir, exist_ok=True)
+
+    print('Iniciando el algoritmo genético...')
     
     # Cargar población inicial (preentrenada o nueva)
     if archivo_preentrenado:

@@ -19,10 +19,6 @@ def preprocesar_datos():
     datos = [leer_asc(m) for m in ruta_mapas]
     vientod, vientov, pendiente, vegetacion, orientacion, area_quemada = datos
 
-    # Parámetros derivados
-    beta_veg = cp.where(vegetacion <= 2, 0, 0.1 * vegetacion)
-    gamma = cp.where(vegetacion <= 2, 100, 0.1)
-
     vientod_rad = vientod * cp.pi / 180
     # Componentes cartesianas del viento:
     wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
@@ -37,8 +33,6 @@ def preprocesar_datos():
         "pendiente": cp.flipud(pendiente),
         "vegetacion": cp.flipud(vegetacion),
         "orientacion": cp.flipud(orientacion),
-        "beta_veg": cp.flipud(beta_veg),
-        "gamma": cp.flipud(gamma),
         "wx": cp.flipud(wx),
         "wy": cp.flipud(wy),
         "h_dx": cp.flipud(h_dx),
