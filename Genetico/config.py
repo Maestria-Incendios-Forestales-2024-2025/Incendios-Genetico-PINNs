@@ -12,4 +12,4 @@ ruta_mapas = ['c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Te
 d = cp.float32(30) # Tamaño de cada celda
 dt = cp.float32(1/6) # Intervalo de tiempo en horas
 cota = 0.95 
-num_steps = 1001 # Número de pasos de tiempo para la simulación
+num_steps = 10000 # Número de pasos de tiempo para la simulación
