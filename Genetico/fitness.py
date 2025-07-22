@@ -120,6 +120,20 @@ def aptitud_batch(parametros_batch):
     """
     batch_size = len(parametros_batch)
     
+    # VALIDACIÓN TEMPRANA: Verificar condición de estabilidad
+    dt = 1/6  # Tu dt actual
+    for i, params in enumerate(parametros_batch):
+        if len(params) >= 7:
+            beta_params = params[5]
+            gamma_params = params[6]
+            for j in range(len(beta_params)):
+                beta_gamma_sum = beta_params[j] + gamma_params[j]
+                if dt >= 1/beta_gamma_sum:
+                    print(f"⚠️ ADVERTENCIA Sim {i}, Veg {j}: β+γ={beta_gamma_sum:.3f}, dt_max={1/beta_gamma_sum:.4f} < dt={dt:.4f}")
+    
+    # Resto del código original...
+    batch_size = len(parametros_batch)
+    
     # Inicializar arrays para el batch
     S_batch = cp.ones((batch_size, ny, nx), dtype=cp.float32)
     I_batch = cp.zeros((batch_size, ny, nx), dtype=cp.float32)
@@ -153,6 +167,7 @@ def aptitud_batch(parametros_batch):
 
     # Simular en paralelo
     simulaciones_validas = cp.ones(batch_size, dtype=cp.bool_)
+    paso_explosion = cp.full(batch_size, -1, dtype=cp.int32)  # -1 significa no explotó
     
     for t in range(num_steps):
         # Llamar al kernel con todos los parámetros necesarios
@@ -170,12 +185,34 @@ def aptitud_batch(parametros_batch):
         R_batch, R_new_batch = R_new_batch, R_batch
         
         # Verificar si alguna simulación explota
-        validas = cp.all((R_batch >= 0) & (R_batch <= 1), axis=(1, 2))
-        simulaciones_validas &= validas
+        # Condiciones más estrictas para detectar problemas temprano
+        validas = cp.all((R_batch >= -1e-6) & (R_batch <= 1 + 1e-6), axis=(1, 2))
+        
+        # Detectar valores extremos que pueden causar problemas
+        valores_extremos = cp.any((R_batch > 10) | (R_batch < -10), axis=(1, 2))
+        
+        # Registrar el paso de explosión para simulaciones que acaban de explotar
+        nuevas_explosiones = simulaciones_validas & (~validas | valores_extremos)
+        paso_explosion = cp.where(nuevas_explosiones, t + 1, paso_explosion)
+        
+        # Actualizar estado de validez
+        simulaciones_validas &= validas & (~valores_extremos)
         
         # Si todas las simulaciones explotaron, terminar
         if not cp.any(simulaciones_validas):
+            print(f"Todas las simulaciones explotaron en el paso {t+1}")
             break
+            
+        # Verificación cada 100 pasos para detectar tendencias problemáticas
+        if t % 100 == 0 and t > 0:
+            max_R = cp.max(R_batch, axis=(1, 2))
+            min_R = cp.min(R_batch, axis=(1, 2))
+            sims_problema = (max_R > 1.1) | (min_R < -0.1)
+            if cp.any(sims_problema):
+                indices_problema = cp.where(sims_problema)[0]
+                print(f"Paso {t}: Simulaciones con valores sospechosos: {[int(x) for x in indices_problema]}")
+                print(f"  Max R: {[float(max_R[i]) for i in indices_problema]}")
+                print(f"  Min R: {[float(min_R[i]) for i in indices_problema]}")
     
     # Calcular fitness para cada simulación en paralelo
     fitness_values = []
@@ -194,6 +231,13 @@ def aptitud_batch(parametros_batch):
     burnt_cells_total = cp.sum(burnt_cells)
     fitness_batch = (union_batch - interseccion_batch) / burnt_cells_total
     
+    # Calcular celdas quemadas por cada simulación individual
+    celdas_quemadas_por_sim = cp.sum(burnt_cells_sim_batch, axis=(1, 2))  # Suma sobre ejes espaciales
+    
+    print(f'Celdas quemadas por simulación: {[int(x) for x in celdas_quemadas_por_sim]}')
+    print(f'Celdas quemadas total (todas sims): {int(cp.sum(burnt_cells_sim_batch))}')
+    print(f'Fitness batch: {[float(f) for f in fitness_batch]}')
+
     # Procesar resultados
     for i in range(batch_size):
         if not simulaciones_validas[i]:
@@ -204,10 +248,25 @@ def aptitud_batch(parametros_batch):
         # Información de debug
         params = parametros_batch[i]
         D, A, B, x, y = params[0], params[1], params[2], params[3], params[4]
+        celdas_sim_i = int(celdas_quemadas_por_sim[i])
+        paso_exp_i = int(paso_explosion[i])
+        
         if simulaciones_validas[i]:
-            print(f'Sim {i}: fitness={fitness_batch[i]:.4f}, D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}')
-            print(f'  Celdas quemadas: {burnt_cells_total}, Simuladas: {cp.sum(burnt_cells_sim_batch[i])}')
+            print(f'Sim {i}: fitness={fitness_batch[i]:.4f}, D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}, betas={params[5]}, gammas={params[6]}')
+            print(f'  Celdas quemadas referencia: {burnt_cells_total}, Simuladas: {celdas_sim_i}')
         else:
-            print(f'Sim {i}: fitness=inf (simulación explotó), D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}')
-
+            print(f'Sim {i}: fitness=inf (explotó en paso {paso_exp_i}), D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}, betas={params[5]}, gammas={params[6]}')
+            print(f'  Celdas simuladas antes de explotar: {celdas_sim_i}')
+    
+    # Resumen de explosiones
+    explosiones = paso_explosion[paso_explosion >= 0]
+    if len(explosiones) > 0:
+        print(f'\nResumen de explosiones:')
+        print(f'  Total simulaciones que explotaron: {len(explosiones)}/{batch_size}')
+        print(f'  Pasos de explosión: {[int(x) for x in explosiones]}')
+        print(f'  Paso promedio de explosión: {float(cp.mean(explosiones)):.1f}')
+        print(f'  Rango de explosiones: {int(cp.min(explosiones))} - {int(cp.max(explosiones))}')
+    else:
+        print(f'\nNo hubo explosiones en este batch ({batch_size} simulaciones completadas)')
+    
     return fitness_values
