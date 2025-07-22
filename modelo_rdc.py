@@ -55,10 +55,12 @@ __global__ void spread_infection_kernel_raw(const float* S, const float* I, cons
                    + s * laplacian_I - dt / d * (adv_x * I_dx + adv_y * I_dy);
     float R_temp = R_val + dt * gamma_val * I_val;
 
+    // Verificar límites físicos y conservación
     if (beta_val == 0.0f) {
         S_temp = 1.0f;
         I_temp = 0.0f;
-    }
+        R_temp = 0.0f;
+    } 
 
     S_new[idx] = S_temp;
     I_new[idx] = I_temp;
