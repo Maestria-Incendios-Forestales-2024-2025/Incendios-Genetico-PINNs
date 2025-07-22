@@ -46,14 +46,26 @@ ny, nx = vegetacion.shape  # Usamos cualquier mapa para obtener las dimensiones
 # Tamaño de cada celda
 d = cp.float32(30) # metros
 # Coeficiente de difusión
-D = cp.float32(10) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
+D = cp.float32(21.625) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
-# Parámetros del modelo SI
-beta_veg = cp.where(vegetacion <= 2, 0, 0.1 * vegetacion) # fracción de vegetación incéndiandose por hora
+beta_params = [0.55, 0.6, 0.8, 1.0, 1.0]
+gamma_params = [0.1, 0.1, 0.1, 0.1, 0.1]
 
-# Hacemos una máscara donde vegetación <=2, gamma >> 1/dt. Sino, vale 0.1. 
-gamma = cp.where(vegetacion <= 2, cp.float32(100), cp.float32(0.1)) # fracción de vegetación que se apaga por hora.
-                                                                    # 1/gamma es el tiempo promedio del incendio
+veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
+beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
+gamma = cp.zeros_like(vegetacion, dtype=cp.float32)
+# Asignar beta_veg según el tipo de vegetación
+for j, veg_type in enumerate(veg_types):
+    mask = (vegetacion == veg_type)
+    beta_veg = cp.where(mask, beta_params[j], beta_veg)
+    gamma = cp.where(mask, gamma_params[j], gamma)
+
+# # Parámetros del modelo SI
+# beta_veg = cp.where(vegetacion <= 2, 0) # fracción de vegetación incéndiandose por hora
+
+# # Hacemos una máscara donde vegetación <=2, gamma >> 1/dt. Sino, vale 0.1. 
+# gamma = cp.where(vegetacion <= 2, cp.float32(100), cp.float32(0.1)) # fracción de vegetación que se apaga por hora.
+#                                                                     # 1/gamma es el tiempo promedio del incendio
 
 beta_veg = beta_veg.astype(cp.float32)
 gamma = gamma.astype(cp.float32)
@@ -73,10 +85,10 @@ wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
 wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
 
 # Constante A adimensional de viento
-A = cp.float32(1e-4) # 10^-3 está al doble del límite de estabilidad
+A = cp.float32(7e-4) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
-B = cp.float32(15) # m/h
+B = cp.float32(10.4521) # m/h
 
 D = cp.asarray(D, dtype=cp.float32).reshape(1)
 A = cp.asarray(A, dtype=cp.float32).reshape(1)
@@ -94,8 +106,8 @@ I = cp.zeros((ny, nx), dtype=cp.float32) # Ningún infectado al principio
 R = cp.zeros((ny, nx), dtype=cp.float32)
 
 # Coordenadas del punto de ignición
-x_ignicion = 500
-y_ignicion = 550
+x_ignicion = 699
+y_ignicion = 727
 
 if vegetacion[y_ignicion, x_ignicion] > 2:
     # Infectados en una esquina de la grilla
@@ -133,6 +145,31 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
         I, I_new = I_new, I
         R, R_new = R_new, R
 
+        if cp.any((R > 1) | (R < 0)) or cp.any((S < 0) | (S > 1)) or cp.any((I < 0) | (I > 1)):
+            if cp.any((R > 1) | (R < 0)):
+                print(f"Error: Valores de R fuera de rango en el paso {t}")
+                if cp.any(R > 1):
+                    print(f"Valores de R mayores a 1 en el paso {t}")
+                if cp.any(R < 0):
+                    print(f"Valores de R menores a 0 en el paso {t}")
+            if cp.any((S < 0) | (S > 1)):
+                print(f"Error: Valores de S fuera de rango en el paso {t}")
+                if cp.any(S < 0):
+                    print(f"Valores de S menores a 0 en el paso {t}")
+                if cp.any(S > 1):
+                    print(f"Valores de S mayores a 1 en el paso {t}")
+            if cp.any((I < 0) | (I > 1)):
+                print(f"Error: Valores de I fuera de rango en el paso {t}")
+                if cp.any(I < 0):
+                    print(f"Valores de I menores a 0 en el paso {t}")
+                if cp.any(I > 1):
+                    print(f"Valores de I mayores a 1 en el paso {t}")
+            break
+
+        # if not cp.all((R <= 1) & (R >= 0)):
+        #     print(f"Error: Valores de R fuera de rango en el paso {t}")
+        #     break
+
         # suma_S = S.sum() / (nx*ny)
         # suma_I = I.sum() / (nx*ny)
         # suma_R = R.sum() / (nx*ny)
@@ -153,7 +190,7 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
     # print(f'Variación de población promedio: {var_poblacion_promedio}')
 
     # Calcular el número de celdas quemadas
-    celdas_quemadas = cp.sum(R > 0.2)
+    celdas_quemadas = cp.sum(R > 0.001)
     print(f'Número de celdas quemadas: {celdas_quemadas}')
 
     # Guardar el estado final de R en un archivo
