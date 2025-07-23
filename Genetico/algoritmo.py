@@ -3,7 +3,7 @@ import csv
 import sys
 import os
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
-from fitness import aptitud, aptitud_batch
+from fitness import aptitud_batch
 from config import d, dt
 from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada
 

@@ -132,7 +132,3 @@ def aptitud_batch(parametros_batch):
             print(f'Sim {i}: fitness=inf (simulación explotó), D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}')
     
     return fitness_values
-
-def aptitud(D, A, B, x, y):
-    """Función de aptitud para un solo incendio (mantener compatibilidad)."""
-    return aptitud_batch([(D, A, B, x, y)])[0]
