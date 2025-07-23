@@ -20,8 +20,8 @@ B_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2))) # contsta
 
 ############################## EJECUCIÓN DEL ALGORITMO ###############################################
 
-limite_beta = [(0.01, 1)] * 5  # Límites para beta_veg
-limite_gamma = [(0.01, 1)] * 5  # Límites para gamma
+limite_beta = [(0.01, 0.3)] * 5  # Límites para beta_veg
+limite_gamma = [(0.01, 0.3)] * 5  # Límites para gamma
 
 # Población aleatoria inicial (D, A, B, x, y)
 limite_parametros = [(0.01, 100), (0, A_max * cota), (0, B_max * cota), (300, 720), (400, 800)] + limite_beta + limite_gamma
