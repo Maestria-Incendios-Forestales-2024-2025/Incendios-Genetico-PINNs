@@ -49,31 +49,31 @@ d = cp.float32(30) # metros
 # Coeficiente de difusión
 D = cp.float32(21.625) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
-beta_params = [0.3, 0.4, 0.5, 0.6, 0.7]
-gamma_params = [0.1, 0.1, 0.1, 0.1, 0.1]
+# beta_params = [0.3, 0.4, 0.5, 0.6, 0.7]
+# gamma_params = [0.1, 0.1, 0.1, 0.1, 0.1]
 
-veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
-beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
-gamma = cp.zeros_like(vegetacion, dtype=cp.float32)
-# Asignar beta_veg según el tipo de vegetación
-for j, veg_type in enumerate(veg_types):
-    mask = (vegetacion == veg_type)
-    beta_veg = cp.where(mask, beta_params[j], beta_veg)
-    gamma = cp.where(mask, gamma_params[j], gamma)
+# veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
+# beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
+# gamma = cp.zeros_like(vegetacion, dtype=cp.float32)
+# # Asignar beta_veg según el tipo de vegetación
+# for j, veg_type in enumerate(veg_types):
+#     mask = (vegetacion == veg_type)
+#     beta_veg = cp.where(mask, beta_params[j], beta_veg)
+#     gamma = cp.where(mask, gamma_params[j], gamma)
 
 #gamma = cupyx.scipy.ndimage.gaussian_filter(gamma, sigma=3.0)
 
-# # Parámetros del modelo SI
-# beta_veg = cp.where(vegetacion <= 2, 0, 0.1*vegetacion) # fracción de vegetación incéndiandose por hora
+# Parámetros del modelo SI
+beta_veg = cp.where(vegetacion <= 2, cp.float32(0), cp.float32(0.4)) # fracción de vegetación incéndiandose por hora
 
-# # Hacemos una máscara donde vegetación <=2, gamma >> 1/dt. Sino, vale 0.1. 
-# gamma = cp.where(vegetacion <= 2, cp.float32(100), cp.float32(0.1)) # fracción de vegetación que se apaga por hora.
-#                                                                     # 1/gamma es el tiempo promedio del incendio
+# Hacemos una máscara donde vegetación <=2, gamma >> 1/dt. Sino, vale 0.1. 
+gamma = cp.where(vegetacion <= 2, cp.float32(0), cp.float32(0.1)) # fracción de vegetación que se apaga por hora.
+                                                                    # 1/gamma es el tiempo promedio del incendio
 
 beta_veg = beta_veg.astype(cp.float32)
 gamma = gamma.astype(cp.float32)
 
-dt = cp.float32(1/6) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica un paso de 10 minutos
+dt = cp.float32(1/4) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica un paso de 10 minutos
 
 # Transformación del viento a coordenadas cartesianas
 # El viento está medido en km/h. En m/h el viento es una cantidad enorme, por eso
@@ -107,6 +107,8 @@ h_dy_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion * cp.pi / 180 
 S = cp.ones((ny, nx), dtype=cp.float32)  # Todos son susceptibles inicialmente
 I = cp.zeros((ny, nx), dtype=cp.float32) # Ningún infectado al principio
 R = cp.zeros((ny, nx), dtype=cp.float32)
+
+S = cp.where(vegetacion <= 2, 0, S)  # Celdas no vegetadas son susceptibles
 
 # Coordenadas del punto de ignición
 x_ignicion = 699
@@ -285,10 +287,10 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
             
             celdas_con_errores += 1
             
-            # Si hay demasiados errores consecutivos, parar
-            if len(pasos_con_errores) >= 5 and all(p in pasos_con_errores for p in range(t-4, t+1)):
-                print(f"Demasiados errores consecutivos. Parando simulación en paso {t}")
-                break
+            # # Si hay demasiados errores consecutivos, parar
+            # if len(pasos_con_errores) >= 5 and all(p in pasos_con_errores for p in range(t-4, t+1)):
+            #     print(f"Demasiados errores consecutivos. Parando simulación en paso {t}")
+            #     break
             # break
 
         # Monitoreo periódico cada 500 pasos

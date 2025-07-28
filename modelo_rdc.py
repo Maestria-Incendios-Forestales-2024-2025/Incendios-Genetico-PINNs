@@ -57,7 +57,7 @@ __global__ void spread_infection_kernel_raw(const float* S, const float* I, cons
 
     // Verificar límites físicos y conservación
     if (beta_val == 0.0f) {
-        S_temp = 1.0f;
+        S_temp = 0.0f;
         I_temp = 0.0f;
         R_temp = 0.0f;
     } 
