@@ -134,19 +134,35 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo
     resultados_dir = f'Genetico/resultados/task_{task_id}'
     os.makedirs(resultados_dir, exist_ok=True)
 
-    print('Iniciando el algoritmo genético...')
-    
     # Cargar población inicial (preentrenada o nueva)
     if archivo_preentrenado:
         combinaciones = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros)
+        
+        # Verificar si los datos preentrenados incluyen fitness
+        if len(combinaciones) > 0 and len(combinaciones[0]) == 6:  # D, A, B, x, y, fitness
+            print("Datos preentrenados con fitness detectados. Convirtiendo a formato de resultados...")
+            resultados = []
+            for individuo in combinaciones:
+                D, A, B, x, y, fitness = individuo
+                resultados.append({
+                    "D": float(D), "A": float(A), "B": float(B), 
+                    "x": int(x), "y": int(y), "fitness": float(fitness)
+                })
+            print(f"Convertidos {len(resultados)} individuos preentrenados con fitness.")
+        else:
+            # Datos sin fitness, procesar normalmente
+            print("Datos preentrenados sin fitness. Calculando fitness...")
+            resultados = procesar_poblacion_batch(combinaciones, batch_size)
     else:
         combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
-
+        resultados = procesar_poblacion_batch(combinaciones, batch_size)
+    
     mutation_rate = 0.3
 
-    # Procesar población inicial en batch
-    print("Procesando población inicial en batch...")
-    resultados = procesar_poblacion_batch(combinaciones, batch_size)
+    # Procesar población inicial en batch (solo si no tenemos datos preentrenados con fitness)
+    if not archivo_preentrenado or len(combinaciones[0]) != 6:
+        print("Procesando población inicial en batch...")
+        resultados = procesar_poblacion_batch(combinaciones, batch_size)
 
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 

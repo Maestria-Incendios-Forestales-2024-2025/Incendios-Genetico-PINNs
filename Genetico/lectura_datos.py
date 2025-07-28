@@ -80,10 +80,19 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
                         if len(combinaciones_preentrenadas) < 3:
                             print(f"DEBUG: Cargando fila {len(combinaciones_preentrenadas)+1}: x={row['x']}→{x_val}, y={row['y']}→{y_val}")
                         
-                        combinaciones_preentrenadas.append(
-                            cp.array([float(row['D']), float(row['A']), float(row['B']), 
-                                     x_val, y_val])
-                        )
+                        # Verificar si tiene fitness
+                        if 'fitness' in row and row['fitness']:
+                            # Incluir fitness
+                            combinaciones_preentrenadas.append(
+                                cp.array([float(row['D']), float(row['A']), float(row['B']), 
+                                         x_val, y_val, float(row['fitness'])], dtype=cp.float32)
+                            )
+                        else:
+                            # Sin fitness, solo parámetros
+                            combinaciones_preentrenadas.append(
+                                cp.array([float(row['D']), float(row['A']), float(row['B']), 
+                                         x_val, y_val], dtype=cp.float32)
+                            )
                     except (ValueError, TypeError) as e:
                         print(f"WARNING: Saltando fila inválida: {row} - Error: {e}")
                         continue
