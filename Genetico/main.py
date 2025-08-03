@@ -4,6 +4,8 @@ from config import d, dt, cota
 from lectura_datos import preprocesar_datos
 from algoritmo import genetic_algorithm
 
+print(cp.cuda.runtime.getDeviceProperties(0)['name'])
+
 ############################## CARGADO DE MAPAS #######################################################
 
 datos = preprocesar_datos()

@@ -1,7 +1,5 @@
 import cupy as cp  # type: ignore
-import csv
-import sys
-import os
+import csv, os, sys
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
 from fitness import aptitud_batch
 from config import d, dt
@@ -10,9 +8,6 @@ from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada, leer
 # Agregar el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modelo_rdc import courant
-
-device = cp.cuda.Device()
-print("Nombre de la GPU:", device.attributes['name'])
 
 ############################## CARGADO DE MAPAS ###############################################
 
