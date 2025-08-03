@@ -65,6 +65,8 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
 
     # Simular en paralelo
     simulaciones_validas = cp.ones(batch_size, dtype=cp.bool_)
+
+    print(f'Numero de pasos a simular: {num_steps}')
     
     for t in range(num_steps):
         # Llamar al kernel con todos los parámetros necesarios

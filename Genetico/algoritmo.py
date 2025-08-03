@@ -122,7 +122,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
 
     # Procesar población inicial en batch
     print("Procesando población inicial en batch...")
-    resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, batch_size)
+    resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, batch_size=batch_size)
 
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 
@@ -142,10 +142,10 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
             new_population.extend([child1, child2]) # Estos hijos pasan a formar parte de la nueva población
 
         population = cp.array(new_population)
-        
+
         # Procesar nueva población en batch
         print(f"Procesando generación {gen+1} en batch...")
-        resultados = procesar_poblacion_batch(population, batch_size)
+        resultados = procesar_poblacion_batch(population, ruta_incendio_referencia, limite_parametros, batch_size=batch_size)
 
         peor_idx = max(range(len(resultados)), key=lambda i: resultados[i]["fitness"])
         resultados[peor_idx] = elite  # Mantener el mejor individuo de la generación anterior
