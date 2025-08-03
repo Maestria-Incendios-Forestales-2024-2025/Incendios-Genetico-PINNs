@@ -13,11 +13,25 @@ def leer_asc(ruta):
         data = np.loadtxt(f) 
         return cp.array(data, dtype=cp.float32) 
     
+############################## LEER MAPA INCENDIO DE REFERENCIA ###############################################
+
+def leer_incendio_referencia(ruta):
+    _, extension = os.path.splitext(ruta)
+    if extension == '.asc':
+        mapa_incendio_referencia = leer_asc(ruta)
+    elif extension == '.npy':
+        mapa_incendio_referencia = cp.load(ruta)
+        if mapa_incendio_referencia.ndim == 3:
+            mapa_incendio_referencia = mapa_incendio_referencia[0]
+    else:
+        raise ValueError(f'Extensión no reconocida: {extension}')
+    return cp.flipud(mapa_incendio_referencia)
+    
 ############################## CALCULO A PARTIR DE MAPAS ###############################################
 
 def preprocesar_datos():
     datos = [leer_asc(m) for m in ruta_mapas]
-    vientod, vientov, pendiente, vegetacion, orientacion, area_quemada = datos
+    vientod, vientov, pendiente, vegetacion, orientacion = datos
 
     # Parámetros derivados
     beta_veg = cp.where(vegetacion <= 2, 0, 0.1 * vegetacion)
@@ -43,7 +57,6 @@ def preprocesar_datos():
         "wy": cp.flipud(wy),
         "h_dx": cp.flipud(h_dx),
         "h_dy": cp.flipud(h_dy),
-        "area_quemada": cp.flipud(area_quemada),
         "ny": vientod.shape[0],
         "nx": vientod.shape[1],
     }

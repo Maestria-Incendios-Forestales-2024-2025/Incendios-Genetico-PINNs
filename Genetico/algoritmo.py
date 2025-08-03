@@ -5,7 +5,7 @@ import os
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
 from fitness import aptitud_batch
 from config import d, dt
-from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada
+from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada, leer_incendio_referencia
 
 # Agregar el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -20,27 +20,34 @@ wx = datos["wx"]
 wy = datos["wy"]
 h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
-area_quemada = datos["area_quemada"]
 
 ############################## CHEQUEO DE CONDICIÓN DE COURANT ###############################################
 
 def validate_courant_and_adjust(D, A, B):
     """Valida la condición de Courant y ajusta parámetros si es necesario."""
-    while not courant(dt, D, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
-        param_to_modify = cp.random.choice(["D", "A", "B"])
-        
-        if param_to_modify == "D":
-            D = float(D * float(cp.random.uniform(0.8, 0.99)))
-        elif param_to_modify == "A":
-            A = float(A * float(cp.random.uniform(0.8, 0.99)))
-        elif param_to_modify == "B":
-            B = float(B * float(cp.random.uniform(0.8, 0.99)))
     
+    iteraciones = 0
+    while not courant(dt, D, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
+        iteraciones += 1
+        # Alternativa más eficiente: seleccionar aleatoriamente entre 0, 1, 2
+        param_idx = int(cp.random.randint(0, 3))  # 0, 1, o 2
+        
+        if param_idx == 0:  # D
+            D = float(D * float(cp.random.uniform(0.8, 0.99)))
+        elif param_idx == 1:  # A
+            A = float(A * float(cp.random.uniform(0.8, 0.99)))
+        elif param_idx == 2:  # B
+            B = float(B * float(cp.random.uniform(0.8, 0.99)))
+        
+        # Evitar bucles infinitos
+        if iteraciones > 100:
+            print(f"Warning: Validación Courant tomó {iteraciones} iteraciones")
+            break
     return D, A, B
 
 ############################## PROCESAMIENTO EN BATCH ###############################################
 
-def procesar_poblacion_batch(poblacion, batch_size=10):
+def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, num_steps=10000, batch_size=10):
     """
     Procesa una población en batches para aprovechar el paralelismo.
     
@@ -52,6 +59,10 @@ def procesar_poblacion_batch(poblacion, batch_size=10):
         Lista de resultados con fitness calculado
     """
     resultados = []
+
+    incendio_referencia = leer_incendio_referencia(ruta_incendio_referencia)
+    print(incendio_referencia.shape)
+    celdas_quemadas_referencia = cp.where(incendio_referencia > 0.001, 1, 0)
     
     for i in range(0, len(poblacion), batch_size):
         batch = poblacion[i:i+batch_size]
@@ -64,12 +75,12 @@ def procesar_poblacion_batch(poblacion, batch_size=10):
             
             # Validar y ajustar parámetros
             D, A, B = validate_courant_and_adjust(D, A, B)
-            x, y = validate_ignition_point(x, y)
+            x, y = validate_ignition_point(x, y, incendio_referencia)
             
             parametros_batch.append((D, A, B, x, y))
         
         # Calcular fitness en batch
-        fitness_values = aptitud_batch(parametros_batch)
+        fitness_values = aptitud_batch(parametros_batch, celdas_quemadas_referencia, num_steps)
         
         # Agregar resultados
         for j, (params, fitness) in enumerate(zip(parametros_batch, fitness_values)):
@@ -83,15 +94,15 @@ def procesar_poblacion_batch(poblacion, batch_size=10):
 
 ############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
 
-def validate_ignition_point(x, y):
+def validate_ignition_point(x, y, incendio_referencia):
     """Valida que el punto de ignición tenga combustible."""
-    while vegetacion[int(y), int(x)] <= 2 and area_quemada[int(y), int(x)] <= 0.001:
+    while vegetacion[int(y), int(x)] <= 2 or incendio_referencia[int(y), int(x)] <= 0.001:
         x, y = float(cp.random.randint(300, 720)), float(cp.random.randint(400, 800))
     return x, y
 
 ############################## ALGORITMO GENÉTICO #########################################################
 
-def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo_preentrenado=None, batch_size=10):
+def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, archivo_preentrenado=None, batch_size=10):
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
     
     # Obtener el task_id del SGE
@@ -111,7 +122,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo
 
     # Procesar población inicial en batch
     print("Procesando población inicial en batch...")
-    resultados = procesar_poblacion_batch(combinaciones, batch_size)
+    resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, batch_size)
 
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 

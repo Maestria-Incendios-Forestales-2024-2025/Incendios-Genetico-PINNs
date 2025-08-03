@@ -1,17 +1,13 @@
 import cupy as cp # type: ignore
-from config import d, dt, num_steps
-from lectura_datos import preprocesar_datos, leer_asc
+from config import d, dt
+from lectura_datos import preprocesar_datos
+from lectura_datos import leer_incendio_referencia
 import sys
 import os
 
 # Agrega el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modelo_rdc import spread_infection_raw
-
-############################## FUNCIÓN PARA AGREGAR UNA DIMENSIÓN ###############################################
-
-def ensure_batch_dim(*arrays):
-    return [arr if arr.ndim == 3 else arr[cp.newaxis, ...] for arr in arrays]
 
 ############################## CARGADO DE MAPAS ###############################################
 
@@ -23,17 +19,11 @@ h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
 beta_veg = datos["beta_veg"].astype(cp.float32)
 gamma = datos["gamma"].astype(cp.float32)
-area_quemada = datos["area_quemada"]
 ny, nx = datos["ny"], datos["nx"]
-
-############################## INCENDIO DE REFERENCIA ###############################################
-
-area_quemada = datos["area_quemada"]
-burnt_cells = cp.where(area_quemada > 0.001, 1, 0)  # Celdas quemadas en el mapa de referencia
 
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS ###############################################
 
-def aptitud_batch(parametros_batch):
+def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     """
     Calcula el fitness para múltiples combinaciones de parámetros en paralelo.
     
@@ -123,12 +113,12 @@ def aptitud_batch(parametros_batch):
         else:
             fitness_values.append(float(fitness_batch[i]))
         
-        # Información de debug
-        D, A, B, x, y = parametros_batch[i]
-        if simulaciones_validas[i]:
-            print(f'Sim {i}: fitness={fitness_batch[i]:.4f}, D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}')
-            print(f'  Celdas quemadas: {burnt_cells_total}, Simuladas: {cp.sum(burnt_cells_sim_batch[i])}')
-        else:
-            print(f'Sim {i}: fitness=inf (simulación explotó), D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}')
+        # # Información de debug
+        # D, A, B, x, y = parametros_batch[i]
+        # if simulaciones_validas[i]:
+        #     print(f'Sim {i}: fitness={fitness_batch[i]:.4f}, D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}')
+        #     print(f'  Celdas quemadas: {burnt_cells_total}, Simuladas: {cp.sum(burnt_cells_sim_batch[i])}')
+        # else:
+        #     print(f'Sim {i}: fitness=inf (simulación explotó), D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}')
     
     return fitness_values

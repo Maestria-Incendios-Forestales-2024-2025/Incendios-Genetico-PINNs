@@ -1,5 +1,5 @@
 import cupy as cp # type: ignore
-import csv, time
+import time
 from config import d, dt, cota
 from lectura_datos import preprocesar_datos
 from algoritmo import genetic_algorithm
@@ -11,6 +11,10 @@ wx = datos["wx"]
 wy = datos["wy"]
 h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
+
+############################## INCENDIO DE REFERENCIA ####################################################
+
+ruta_incendio_referencia = 'c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/area_quemada_SM.asc'
 
 ############################## CONDICIÓN DE COURANT PARA LOS TÉRMINOS DIFUSIVOS Y ADVECTIVOS ############
 
@@ -28,7 +32,7 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 # Ejecutar el GA con procesamiento en batch
-resultados = genetic_algorithm(tamano_poblacion=10, generaciones=0, limite_parametros=limite_parametros, batch_size=2)
+resultados = genetic_algorithm(tamano_poblacion=10, generaciones=0, ruta_incendio_referencia=ruta_incendio_referencia, limite_parametros=limite_parametros, batch_size=2)
 
 # Sincronizar después de completar la ejecución
 cp.cuda.Stream.null.synchronize()
