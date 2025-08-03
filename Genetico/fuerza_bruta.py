@@ -11,7 +11,6 @@ wx = datos["wx"]
 wy = datos["wy"]
 h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
-ny, nx = datos["ny"], datos["nx"]
 
 ############################## INCENDIO DE REFERENCIA ###############################################
 
@@ -32,10 +31,14 @@ B_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2)))
 
 ############################## PARÁMETROS DE LOS INCENDIOS SIMULADOS ###############################################
 
-num_simulaciones = 20
+# Total de simulaciones y tamaño de bloque
+num_total_simulaciones = 570000
+tamano_bloque = 100000
+batch_size = 20
+
 cota = 0.95
 limite_parametros = [(0, 200), (0, A_max * cota), (0, B_max * cota), (500, 900), (500, 900)]
-combinaciones = poblacion_inicial(num_simulaciones, limite_parametros) 
+combinaciones = poblacion_inicial(num_total_simulaciones, limite_parametros) 
 
 ############################## BARRIDA DE PARÁMETROS ###############################################
 
@@ -46,33 +49,47 @@ start.record()
 
 num_steps = 1000
 ruta_incendio_referencia = 'R_final.npy'
-resultados = procesar_poblacion_batch(poblacion=combinaciones, ruta_incendio_referencia=ruta_incendio_referencia, 
-                                      num_steps=num_steps, batch_size=20)
+
+resultados_dir = f'resultados_fuerza_bruta'
+os.makedirs(resultados_dir, exist_ok=True)
+# Obtener el task_id del SGE
+task_id = os.environ.get('JOB_ID', 'default')
+
+# Loop por bloques
+for i in range(0, num_total_simulaciones, tamano_bloque):
+    # Determinar inicio y fin del bloque
+    inicio = i
+    fin = min(i + tamano_bloque, num_total_simulaciones)
+    
+    # Subconjunto de combinaciones para este bloque
+    sub_poblacion = combinaciones[inicio:fin]
+
+    print(f"Procesando simulaciones {inicio} a {fin}")
+
+    # Ejecutar las simulaciones para esta parte
+    resultados = procesar_poblacion_batch(
+        poblacion=sub_poblacion,
+        ruta_incendio_referencia=ruta_incendio_referencia,
+        num_steps=num_steps,
+        batch_size=batch_size
+    )
+
+    # Guardar resultados de este bloque
+    bloque_id = inicio // tamano_bloque
+    csv_filename = os.path.join(resultados_dir, f'resultados_bloque_{bloque_id}_task_{task_id}.csv')
+    with open(csv_filename, 'w', newline='') as csvfile:
+        fieldnames = ['D', 'A', 'B', 'x', 'y', 'fitness']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        for resultado in resultados:
+            writer.writerow(resultado)
+
+    print(f'Resultados guardados en: {resultados_dir}')
+    print(f'Task ID: {task_id}')
 
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")
-
-
-############################## GUARDADO DE RESULTADOS ###############################################
-
-resultados_dir = f'Genetico/resultados_fuerza_bruta'
-os.makedirs(resultados_dir, exist_ok=True)
-# Obtener el task_id del SGE
-task_id = os.environ.get('JOB_ID', 'default')
-
-# Guardar resultados finales con información del task
-final_csv_filename = os.path.join(resultados_dir, f'resultados_finales_task_{task_id}.csv')
-with open(final_csv_filename, 'w', newline='') as csvfile:
-    fieldnames = ['D', 'A', 'B', 'x', 'y', 'fitness']
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    writer.writeheader()
-    for resultado in resultados:
-        writer.writerow(resultado)
-    
-print(f'Resultados guardados en: {resultados_dir}')
-print(f'Task ID: {task_id}')
-
 

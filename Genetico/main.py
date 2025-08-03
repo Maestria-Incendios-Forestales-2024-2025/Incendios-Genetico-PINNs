@@ -32,7 +32,10 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 # Ejecutar el GA con procesamiento en batch
-resultados = genetic_algorithm(tamano_poblacion=10, generaciones=0, ruta_incendio_referencia=ruta_incendio_referencia, limite_parametros=limite_parametros, batch_size=2)
+resultados = genetic_algorithm(tamano_poblacion=10, generaciones=0, limite_parametros=limite_parametros,
+                               ruta_incendio_referencia=ruta_incendio_referencia, 
+                               archivo_preentrenado='resultados/task_1811295/resultados_finales_task_1811295.csv',  
+                               batch_size=2)
 
 # Sincronizar después de completar la ejecución
 cp.cuda.Stream.null.synchronize()

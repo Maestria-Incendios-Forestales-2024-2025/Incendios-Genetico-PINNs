@@ -45,9 +45,18 @@ def validate_courant_and_adjust(D, A, B):
             break
     return D, A, B
 
+############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
+
+def validate_ignition_point(x, y, incendio_referencia, limite_parametros):
+    """Valida que el punto de ignición tenga combustible."""
+    lim_x, lim_y = limite_parametros[3], limite_parametros[4]
+    while vegetacion[int(y), int(x)] <= 2 or incendio_referencia[int(y), int(x)] <= 0.001:
+        x, y = float(cp.random.randint(lim_x[0], lim_x[1])), float(cp.random.randint(lim_y[0], lim_y[1]))
+    return x, y
+
 ############################## PROCESAMIENTO EN BATCH ###############################################
 
-def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, num_steps=10000, batch_size=10):
+def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_parametros, num_steps=10000, batch_size=10):
     """
     Procesa una población en batches para aprovechar el paralelismo.
     
@@ -61,7 +70,6 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, num_steps=1000
     resultados = []
 
     incendio_referencia = leer_incendio_referencia(ruta_incendio_referencia)
-    print(incendio_referencia.shape)
     celdas_quemadas_referencia = cp.where(incendio_referencia > 0.001, 1, 0)
     
     for i in range(0, len(poblacion), batch_size):
@@ -75,7 +83,7 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, num_steps=1000
             
             # Validar y ajustar parámetros
             D, A, B = validate_courant_and_adjust(D, A, B)
-            x, y = validate_ignition_point(x, y, incendio_referencia)
+            x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
             
             parametros_batch.append((D, A, B, x, y))
         
@@ -92,14 +100,6 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, num_steps=1000
     
     return resultados
 
-############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
-
-def validate_ignition_point(x, y, incendio_referencia):
-    """Valida que el punto de ignición tenga combustible."""
-    while vegetacion[int(y), int(x)] <= 2 or incendio_referencia[int(y), int(x)] <= 0.001:
-        x, y = float(cp.random.randint(300, 720)), float(cp.random.randint(400, 800))
-    return x, y
-
 ############################## ALGORITMO GENÉTICO #########################################################
 
 def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, archivo_preentrenado=None, batch_size=10):
@@ -109,7 +109,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
     task_id = os.environ.get('JOB_ID', 'default')
     
     # Crear la carpeta de resultados con el task_id
-    resultados_dir = f'Genetico/resultados/task_{task_id}'
+    resultados_dir = f'resultados/task_{task_id}'
     os.makedirs(resultados_dir, exist_ok=True)
     
     # Cargar población inicial (preentrenada o nueva)
@@ -122,7 +122,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
 
     # Procesar población inicial en batch
     print("Procesando población inicial en batch...")
-    resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, batch_size)
+    resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, batch_size)
 
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 
