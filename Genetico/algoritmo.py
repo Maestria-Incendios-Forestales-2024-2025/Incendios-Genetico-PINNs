@@ -11,6 +11,9 @@ from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada, leer
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modelo_rdc import courant
 
+device = cp.cuda.Device()
+print("Nombre de la GPU:", device.attributes['name'])
+
 ############################## CARGADO DE MAPAS ###############################################
 
 # Cargar datos necesarios para validación
