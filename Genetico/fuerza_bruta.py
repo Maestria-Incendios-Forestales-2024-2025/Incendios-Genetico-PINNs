@@ -12,10 +12,6 @@ wy = datos["wy"]
 h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
 
-############################## INCENDIO DE REFERENCIA ###############################################
-
-incendio_referencia = cp.load("R_final.npy") # Cargar el archivo R_history.npy con NumPy
-
 ############################## PARÁMETROS DE LOS MAPAS ###############################################
 
 d = 30 # Tamaño de cada celda
@@ -32,8 +28,8 @@ B_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2)))
 ############################## PARÁMETROS DE LOS INCENDIOS SIMULADOS ###############################################
 
 # Total de simulaciones y tamaño de bloque
-num_total_simulaciones = 570000
-tamano_bloque = 100000
+num_total_simulaciones = 20
+tamano_bloque = 20
 batch_size = 20
 
 cota = 0.95
@@ -48,7 +44,7 @@ end = cp.cuda.Event()
 start.record()
 
 num_steps = 1000
-ruta_incendio_referencia = 'R_final.npy'
+ruta_incendio_referencia = 'Genetico/R_final.npy'
 
 resultados_dir = f'resultados_fuerza_bruta'
 os.makedirs(resultados_dir, exist_ok=True)
@@ -70,6 +66,7 @@ for i in range(0, num_total_simulaciones, tamano_bloque):
     resultados = procesar_poblacion_batch(
         poblacion=sub_poblacion,
         ruta_incendio_referencia=ruta_incendio_referencia,
+        limite_parametros=limite_parametros,
         num_steps=num_steps,
         batch_size=batch_size
     )
