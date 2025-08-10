@@ -44,7 +44,7 @@ d = cp.float32(30) # metros
 D = cp.float32(50) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
 # Parámetros del modelo SI
-beta_veg = cp.where(vegetacion <= 2, cp.float32(0), 0.05 * vegetacion) # fracción de vegetación incéndiandose por hora
+beta_veg = cp.where(vegetacion <= 2, cp.float32(0), cp.float32(0.3)) # fracción de vegetación incéndiandose por hora
 
 # Hacemos una máscara donde vegetación <=2, gamma >> 1/dt. Sino, vale 0.1. 
 gamma = cp.where(vegetacion <= 2, cp.float32(0), cp.float32(0.1)) # fracción de vegetación que se apaga por hora.
@@ -53,7 +53,7 @@ gamma = cp.where(vegetacion <= 2, cp.float32(0), cp.float32(0.1)) # fracción de
 beta_veg = beta_veg.astype(cp.float32)
 gamma = gamma.astype(cp.float32)
 
-dt = cp.float32(1/6) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica un paso de 10 minutos
+dt = cp.float32(1) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica un paso de 10 minutos
 
 # Transformación del viento a coordenadas cartesianas
 # El viento está medido en km/h. En m/h el viento es una cantidad enorme, por eso
@@ -129,7 +129,7 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
 
         if not cp.all((I <= 1) & (I >= 0)):
             print(f"Error: Valores de I fuera de rango en el paso {t}")
-            break
+            # break
 
         if not cp.all((R <= 1) & (R >= 0)):
             print(f"Error: Valores de R fuera de rango en el paso {t}")
