@@ -1,4 +1,4 @@
-from modelo_rdc import spread_infection_adi
+from modelo_rdc import spread_infection_adi, courant
 import numpy as np 
 import cupy as cp # type: ignore
 
@@ -43,17 +43,44 @@ d = cp.float32(30) # metros
 # Coeficiente de difusión
 D = cp.float32(50) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
+# Sortear valores aleatorios para beta_params y gamma_params
+rng = cp.random.default_rng(seed=42)
+beta_params = rng.uniform(0.2, 0.9, size=5)
+gamma_params = rng.uniform(0.05, 0.7, size=5)
+
+# Asegurar que beta > gamma en cada posición
+for i in range(5):
+    if beta_params[i] <= gamma_params[i]:
+        gamma_params[i] = beta_params[i] - rng.uniform(0.05, 0.15)
+        if gamma_params[i] < 0.01:
+            gamma_params[i] = 0.01
+
+beta_params = beta_params.tolist()
+gamma_params = gamma_params.tolist()
+
+veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
+beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
+gamma = cp.zeros_like(vegetacion, dtype=cp.float32)
+# Asignar beta_veg según el tipo de vegetación
+for j, veg_type in enumerate(veg_types):
+    mask = (vegetacion == veg_type)
+    beta_veg = cp.where(mask, beta_params[j], beta_veg)
+    gamma = cp.where(mask, gamma_params[j], gamma)
+
+print(f'Valores de beta: {beta_params}')
+print(f'Valores de gamma: {gamma_params}')
+
 # Parámetros del modelo SI
-beta_veg = cp.where(vegetacion <= 2, cp.float32(0), cp.float32(0.3)) # fracción de vegetación incéndiandose por hora
+# beta_veg = cp.where(vegetacion <= 2, cp.float32(0), 0.1 * vegetacion) # fracción de vegetación incéndiandose por hora
 
 # Hacemos una máscara donde vegetación <=2, gamma >> 1/dt. Sino, vale 0.1. 
-gamma = cp.where(vegetacion <= 2, cp.float32(0), cp.float32(0.1)) # fracción de vegetación que se apaga por hora.
+# gamma = cp.where(vegetacion <= 2, cp.float32(0), cp.float32(0.1)) # fracción de vegetación que se apaga por hora.
                                                                     # 1/gamma es el tiempo promedio del incendio
 
 beta_veg = beta_veg.astype(cp.float32)
 gamma = gamma.astype(cp.float32)
 
-dt = cp.float32(1) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica un paso de 10 minutos
+dt = cp.float32(1/2) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica un paso de 10 minutos
 
 # Transformación del viento a coordenadas cartesianas
 # El viento está medido en km/h. En m/h el viento es una cantidad enorme, por eso
@@ -71,7 +98,7 @@ wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
 A = cp.float32(5e-4) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
-B = cp.float32(15) # m/h
+B = cp.float32(1) # m/h
 
 # Cálculo de la pendiente (usando mapas de pendiente y orientación)
 h_dx_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
@@ -85,6 +112,8 @@ I = cp.zeros((ny, nx), dtype=cp.float32) # Ningún infectado al principio
 R = cp.zeros((ny, nx), dtype=cp.float32)
 
 S = cp.where(vegetacion <= 2, 0, S)  # Celdas no vegetadas son susceptibles
+
+print(f'Se cumple la condición de Courant para el término advectivo: {courant(dt/2, D, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
 
 # Coordenadas del punto de ignición
 x_ignicion = 699
@@ -114,6 +143,8 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
     I_new = cp.empty_like(I)
     R_new = cp.empty_like(R)
 
+    celdas_rotas = 0
+
     # Iterar sobre las simulaciones
     for t in range(num_steps):
         spread_infection_adi(S, I, R, S_new, I_new, R_new, dt, d, beta_veg, gamma, D, wx, wy, h_dx_mapa, h_dy_mapa, A, B)
@@ -125,15 +156,22 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
 
         if not cp.all((S <= 1) & (S >= 0)):
             print(f"Error: Valores de S fuera de rango en el paso {t}")
-            break
+            celdas_rotas += 1
+            # break
 
         if not cp.all((I <= 1) & (I >= 0)):
             print(f"Error: Valores de I fuera de rango en el paso {t}")
+            celdas_rotas += 1
+            print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
+            print(f'Valor máximo de I: {I.max()}')
             # break
 
         if not cp.all((R <= 1) & (R >= 0)):
             print(f"Error: Valores de R fuera de rango en el paso {t}")
-            break
+            celdas_rotas += 1
+            print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
+            print(f'Valor máximo de R: {R.max()}')  
+            # break
 
         suma_S = S.sum() / (nx*ny)
         suma_I = I.sum() / (nx*ny)
