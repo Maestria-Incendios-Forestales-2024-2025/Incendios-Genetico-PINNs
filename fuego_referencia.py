@@ -41,19 +41,19 @@ ny, nx = vegetacion.shape  # Usamos cualquier mapa para obtener las dimensiones
 # Tamaño de cada celda
 d = cp.float32(30) # metros
 # Coeficiente de difusión
-D = cp.float32(50) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
+D = cp.float32(1000) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
 # Sortear valores aleatorios para beta_params y gamma_params
-rng = cp.random.default_rng(seed=42)
-beta_params = rng.uniform(0.2, 0.9, size=5)
-gamma_params = rng.uniform(0.05, 0.7, size=5)
+rng = cp.random.default_rng(seed=43)
+# Generar betas crecientes
 
-# Asegurar que beta > gamma en cada posición
-for i in range(5):
-    if beta_params[i] <= gamma_params[i]:
-        gamma_params[i] = beta_params[i] - rng.uniform(0.05, 0.15)
-        if gamma_params[i] < 0.01:
-            gamma_params[i] = 0.01
+beta_params = cp.sort(rng.uniform(0.2, 0.9, size=5))
+
+gamma_factors = cp.sort(rng.uniform(0.5, 0.9, size=5))
+gamma_params = beta_params * gamma_factors
+
+# Asegurar que no haya gamma < 0.01
+gamma_params = cp.maximum(gamma_params, 0.01)
 
 beta_params = beta_params.tolist()
 gamma_params = gamma_params.tolist()
@@ -61,7 +61,8 @@ gamma_params = gamma_params.tolist()
 veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
 beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
 gamma = cp.zeros_like(vegetacion, dtype=cp.float32)
-# Asignar beta_veg según el tipo de vegetación
+
+# Asignar beta_veg y gamma según tipo de vegetación
 for j, veg_type in enumerate(veg_types):
     mask = (vegetacion == veg_type)
     beta_veg = cp.where(mask, beta_params[j], beta_veg)
@@ -80,7 +81,7 @@ print(f'Valores de gamma: {gamma_params}')
 beta_veg = beta_veg.astype(cp.float32)
 gamma = gamma.astype(cp.float32)
 
-dt = cp.float32(1/2) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica un paso de 10 minutos
+dt = cp.float32(1) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica un paso de 10 minutos
 
 # Transformación del viento a coordenadas cartesianas
 # El viento está medido en km/h. En m/h el viento es una cantidad enorme, por eso
@@ -98,7 +99,7 @@ wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
 A = cp.float32(5e-4) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
-B = cp.float32(1) # m/h
+B = cp.float32(15) # m/h
 
 # Cálculo de la pendiente (usando mapas de pendiente y orientación)
 h_dx_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
@@ -127,7 +128,7 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
     var_poblacion = 0
 
     # Inicializar arrays de cupy para almacenar los resultados
-    num_steps = 1000
+    num_steps = 2000
     pob_total = cp.zeros(num_steps)
     S_total = cp.zeros(num_steps)
     I_total = cp.zeros(num_steps)
@@ -155,22 +156,24 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
         R, R_new = R_new, R
 
         if not cp.all((S <= 1) & (S >= 0)):
-            print(f"Error: Valores de S fuera de rango en el paso {t}")
-            celdas_rotas += 1
+            # print(f"Error: Valores de S fuera de rango en el paso {t}")
+            celdas_rotas += cp.sum((S < 0) | (S > 1))
             # break
 
         if not cp.all((I <= 1) & (I >= 0)):
-            print(f"Error: Valores de I fuera de rango en el paso {t}")
-            celdas_rotas += 1
-            print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
-            print(f'Valor máximo de I: {I.max()}')
+            # print(f"Error: Valores de I fuera de rango en el paso {t}")
+            celdas_rotas += cp.sum((I < 0) | (I > 1))
+            # print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
+            # print(f'Valor mínimo de I: {I.min()}')
+            # print(f'Valor máximo de I: {I.max()}')
             # break
 
         if not cp.all((R <= 1) & (R >= 0)):
-            print(f"Error: Valores de R fuera de rango en el paso {t}")
-            celdas_rotas += 1
-            print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
-            print(f'Valor máximo de R: {R.max()}')  
+            # print(f"Error: Valores de R fuera de rango en el paso {t}")
+            celdas_rotas += cp.sum((R < 0) | (R > 1))
+            # print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
+            # print(f'Valor mínimo de R: {R.min()}')
+            # print(f'Valor máximo de R: {R.max()}')
             # break
 
         suma_S = S.sum() / (nx*ny)
@@ -182,6 +185,15 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
         S_total[t] = suma_S
         I_total[t] = suma_I
         R_total[t] = suma_R
+
+        if (t % 500 == 0) or (t == num_steps - 1):
+            print(f"Paso {t}: Población total = {suma_total}, Susceptibles = {suma_S}, Infectados = {suma_I}, Recuperados = {suma_R}")
+            print(f'Valor máximo de S: {S.max()}')
+            print(f'Valor mínimo de S: {S.min()}')
+            print(f'Valor máximo de I: {I.max()}')
+            print(f'Valor mínimo de I: {I.min()}')
+            print(f'Valor máximo de R: {R.max()}')
+            print(f'Valor mínimo de R: {R.min()}')
 
         var_poblacion += cp.abs(suma_total - pob_total[t-1]) if t > 0 else 0
 
@@ -196,6 +208,7 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
     var_poblacion_promedio = var_poblacion / num_steps
 
     print(f'Variación de población promedio: {var_poblacion_promedio}')
+    print(f'Número de celdas rotas: {celdas_rotas}')
 
 else:
     print("El punto de ignición corresponde a una celda no combustible.")
