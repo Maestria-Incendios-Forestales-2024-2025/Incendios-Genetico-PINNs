@@ -1,6 +1,7 @@
 from modelo_rdc import spread_infection_adi, courant
 import numpy as np 
 import cupy as cp # type: ignore
+import cupyx.scipy.ndimage
 
 ############################## CARGADO DE MAPAS ###############################################
 
@@ -41,19 +42,19 @@ ny, nx = vegetacion.shape  # Usamos cualquier mapa para obtener las dimensiones
 # Tamaño de cada celda
 d = cp.float32(30) # metros
 # Coeficiente de difusión
-D = cp.float32(1000) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
+D = cp.float32(50) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
 # Sortear valores aleatorios para beta_params y gamma_params
-rng = cp.random.default_rng(seed=43)
-# Generar betas crecientes
+rng = cp.random.default_rng(seed=42)
+beta_params = rng.uniform(0.2, 0.9, size=5)
+gamma_params = rng.uniform(0.05, 0.7, size=5)
 
-beta_params = cp.sort(rng.uniform(0.2, 0.9, size=5))
-
-gamma_factors = cp.sort(rng.uniform(0.5, 0.9, size=5))
-gamma_params = beta_params * gamma_factors
-
-# Asegurar que no haya gamma < 0.01
-gamma_params = cp.maximum(gamma_params, 0.01)
+# Asegurar que beta > gamma en cada posición
+for i in range(5):
+    if beta_params[i] <= gamma_params[i]:
+        gamma_params[i] = beta_params[i] - rng.uniform(0.05, 0.15)
+        if gamma_params[i] < 0.01:
+            gamma_params[i] = 0.01
 
 beta_params = beta_params.tolist()
 gamma_params = gamma_params.tolist()
@@ -61,8 +62,7 @@ gamma_params = gamma_params.tolist()
 veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
 beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
 gamma = cp.zeros_like(vegetacion, dtype=cp.float32)
-
-# Asignar beta_veg y gamma según tipo de vegetación
+# Asignar beta_veg según el tipo de vegetación
 for j, veg_type in enumerate(veg_types):
     mask = (vegetacion == veg_type)
     beta_veg = cp.where(mask, beta_params[j], beta_veg)
@@ -70,7 +70,6 @@ for j, veg_type in enumerate(veg_types):
 
 print(f'Valores de beta: {beta_params}')
 print(f'Valores de gamma: {gamma_params}')
-
 # Parámetros del modelo SI
 # beta_veg = cp.where(vegetacion <= 2, cp.float32(0), 0.1 * vegetacion) # fracción de vegetación incéndiandose por hora
 
@@ -80,6 +79,9 @@ print(f'Valores de gamma: {gamma_params}')
 
 beta_veg = beta_veg.astype(cp.float32)
 gamma = gamma.astype(cp.float32)
+
+beta_veg = cupyx.scipy.ndimage.gaussian_filter(beta_veg, sigma=1.0)
+gamma = cupyx.scipy.ndimage.gaussian_filter(gamma, sigma=1.0)
 
 dt = cp.float32(1) # Paso temporal. Si medimos el tiempo en horas, 1/6 indica un paso de 10 minutos
 
@@ -128,7 +130,7 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
     var_poblacion = 0
 
     # Inicializar arrays de cupy para almacenar los resultados
-    num_steps = 2000
+    num_steps = 1000
     pob_total = cp.zeros(num_steps)
     S_total = cp.zeros(num_steps)
     I_total = cp.zeros(num_steps)
