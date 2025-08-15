@@ -114,24 +114,6 @@ __global__ void solve_tridiagonal_x_global(const float* rhs, float* I, const flo
     // punteros base para fila i
     int row_offset = b*ny*nx + i * nx;
 
-    // No computar fila si no hay combustible en toda la fila
-    bool fila_sin_combustible = true;
-    for (int j = 0; j < nx; j++) {
-        if (vegetacion[row_offset + j] > 2.0f) {
-            fila_sin_combustible = false;
-            break;
-        }
-    }
-    if (fila_sin_combustible) {
-        // Fuerza toda la fila a cero
-        for (int j = 0; j < nx; j++) {
-            int idx = row_offset + j;
-            I[idx] = 0.0f;
-            // Si tienes S y R como salida, también pon S[idx] = 0.0f, R[idx] = 0.0f;
-        }
-        return;
-    }
-
     float alpha = D[b] * dt / (d * d);
     float a_val = -alpha;        // diagonal inferior
     float c_val = -alpha;        // diagonal superior
@@ -146,12 +128,12 @@ __global__ void solve_tridiagonal_x_global(const float* rhs, float* I, const flo
     if (vegetacion[idx] <= 2.0f) {
         I[idx] = 0.0f;
         // Si tienes S y R como salida, también pon S[idx] = 0.0f, R[idx] = 0.0f;
-        c_prime[0] = 0.0f;
-        d_prime[0] = 0.0f;
+        c_prime[b*nx] = 0.0f;
+        d_prime[b*nx] = 0.0f;
     } else {
         float b_val = 2.0f * (1.0f + alpha) - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
-        c_prime[0] = c_val / b_val;
-        d_prime[0] = rhs[idx] / b_val;
+        c_prime[b*nx] = c_val / b_val;
+        d_prime[b*nx] = rhs[idx] / b_val;
     }
 
     for (int j = 1; j < nx; j++) {
@@ -159,14 +141,14 @@ __global__ void solve_tridiagonal_x_global(const float* rhs, float* I, const flo
         if (vegetacion[idx] <= 2.0f) {
             I[idx] = 0.0f;
             // Si tienes S y R como salida, también pon S[idx] = 0.0f, R[idx] = 0.0f;
-            c_prime[j] = 0.0f;
-            d_prime[j] = 0.0f;
+            c_prime[b*nx + j] = 0.0f;
+            d_prime[b*nx + j] = 0.0f;
             continue;
         }
         float b_val = 2.0f * (1.0f + alpha) - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
-        float denom = b_val - a_val * c_prime[j - 1];
-        c_prime[j] = c_val / denom;
-        d_prime[j] = (rhs[row_offset + j] - a_val * d_prime[j - 1]) / denom;
+        float denom = b_val - a_val * c_prime[b*nx + j - 1];
+        c_prime[b*nx + j] = c_val / denom;
+        d_prime[b*nx + j] = (rhs[row_offset + j] - a_val * d_prime[b*nx + j - 1]) / denom;
     }
 
     // backward substitution
@@ -198,31 +180,13 @@ __global__ void solve_tridiagonal_y_global(const float* rhs, float* I, const flo
     if (j >= nx || b >= n_batch) return;
     if (j == 0 || j == nx-1) return; // condiciones de frontera
 
-    // No computar columna si no hay combustible en toda la columna
-    bool columna_sin_combustible = true;
-    for (int k = 0; k < ny; k++) {
-        if (vegetacion[b*nx*ny + k * nx + j] > 2.0f) {
-            columna_sin_combustible = false;
-            break;
-        }
-    }
-    if (columna_sin_combustible) {
-        // Fuerza toda la columna a cero
-        for (int k = 0; k < ny; k++) {
-            int idx = b * nx * ny + k * nx + j;
-            I[idx] = 0.0f;
-            // Si tienes S y R como salida, también pon S[idx] = 0.0f, R[idx] = 0.0f;
-        }
-        return;
-    }
-
     float alpha = D[b] * dt / (d * d);
     float a_val = -alpha;        // diagonal inferior
     float c_val = -alpha;        // diagonal superior
 
     // Usar memoria global - cada columna tiene su propio espacio
-    float* c_prime = c_prime_global + j * ny;
-    float* d_prime = d_prime_global + j * ny;
+    float* c_prime = c_prime_global + j * ny + b*nx*ny;
+    float* d_prime = d_prime_global + j * ny + b*nx*ny;
 
     // Forward sweep
     int k = 0;
@@ -243,14 +207,14 @@ __global__ void solve_tridiagonal_y_global(const float* rhs, float* I, const flo
         if (vegetacion[idx] <= 2.0f) {
             I[idx] = 0.0f;
             // Si tienes S y R como salida, también pon S[idx] = 0.0f, R[idx] = 0.0f;
-            c_prime[k] = 0.0f;
-            d_prime[k] = 0.0f;
+            c_prime[b*ny + k] = 0.0f;
+            d_prime[b*ny + k] = 0.0f;
             continue;
         }
         float b_val = 2.0f * (1.0f + alpha) - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
-        float denom = b_val - a_val * c_prime[k-1];
-        c_prime[k] = c_val / denom;
-        d_prime[k] = (rhs[idx] - a_val * d_prime[k-1]) / denom;
+        float denom = b_val - a_val * c_prime[b*ny + k-1];
+        c_prime[b*ny + k] = c_val / denom;
+        d_prime[b*ny + k] = (rhs[idx] - a_val * d_prime[b*ny + k-1]) / denom;
     }
 
     // Back substitution
@@ -258,7 +222,7 @@ __global__ void solve_tridiagonal_y_global(const float* rhs, float* I, const flo
         I[b*nx*ny + (ny-1) * nx + j] = 0.0f;
         // Si tienes S y R como salida, también pon S[(ny-1) * nx + j] = 0.0f, R[(ny-1) * nx + j] = 0.0f;
     } else {
-        I[b*nx*ny + (ny-1) * nx + j] = d_prime[ny-1];
+        I[b*nx*ny + (ny-1) * nx + j] = d_prime[b*ny + (ny-1)];
     }
     for (int k = ny-2; k >= 0; k--) {
         int idx = b*nx*ny + k * nx + j;
@@ -345,40 +309,46 @@ solve_tridiagonal_y_global_kernel = mod.get_function('solve_tridiagonal_y_global
 solve_tridiagonal_x_global_kernel = mod.get_function('solve_tridiagonal_x_global')
 reaction_advection_kernel_raw = mod.get_function('reaction_advection_kernel_raw')
 
-def spread_infection_adi(S, I, R, S_new, I_new, R_new, 
+def spread_infection_adi(S, I, R, S_new, I_new, R_new,
                          dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B, vegetacion):
-    """
-    Implementación corregida del método ADI para el sistema SIR con difusión y convección.
-    
-    El método ADI divide el paso temporal en dos sub-pasos de dt/2 cada uno:
-    1. Implícito en Y, explícito en X para difusión
-    2. Implícito en X, explícito en Y para difusión
-    La reacción y advección se tratan explícitamente
-    """
-    ny, nx, n_batch = S.shape
-    threads = (16, 16)
-    blocks_x = (nx + threads[0] - 1) // threads[0]
-    blocks_y = (ny + threads[1] - 1) // threads[1]
-    blocks_2d = (blocks_x, blocks_y)
+    """Paso ADI (Alternating Direction Implicit) para el sistema SIR con difusión + advección.
 
-    # Arrays temporales para ADI
+    Formato esperado de tensores: (n_batch, ny, nx).
+
+    Esquema (dt total):
+      1) Reacción + advección explícitas dt/2  -> (S_half, I_star, R_half)
+      2) Difusión implícita en Y (sobre I_star)
+      3) Reacción + advección explícitas dt/2  -> (S_new, I_new, R_new)
+      4) Difusión implícita en X (sobre I_new)
+
+    Corrección clave: antes se asumía orden (ny, nx, n_batch); ahora se usa (n_batch, ny, nx).
+    """
+    if S.ndim != 3:
+        raise ValueError("Se espera S con 3 dimensiones (n_batch, ny, nx)")
+
+    n_batch, ny, nx = S.shape
+
+    # Grid para kernels 2D (con batch en z)
+    threads_2d = (16, 16)
+    blocks_x = (nx + threads_2d[0] - 1) // threads_2d[0]
+    blocks_y = (ny + threads_2d[1] - 1) // threads_2d[1]
+    grid_diff_adv = (blocks_x, blocks_y, n_batch)
+
+    # Buffers temporales
     rhs_y = cp.zeros_like(I)
     rhs_x = cp.zeros_like(I)
-    I_star = cp.zeros_like(I)  # Resultado intermedio
-    S_half = cp.zeros_like(S)  # Estados intermedios
+    I_star = cp.zeros_like(I)
+    S_half = cp.zeros_like(S)
     R_half = cp.zeros_like(R)
 
-    # print(f"Ejecutando ADI en dominio {ny}x{nx}")
-
-    ############################## PRIMER SUB-PASO (dt/2) ##############################
-    # Paso 1a: Reacción y Advección explícitas por dt/2
+    # --- Primer semi-paso (dt/2) ---
     reaction_advection_kernel_raw(
-        blocks_2d, threads,
+        grid_diff_adv, threads_2d,
         (
             S.ravel(), I.ravel(), R.ravel(),
             S_half.ravel(), I_star.ravel(), R_half.ravel(),
             beta.ravel(), gamma.ravel(),
-            cp.float32(dt/2), cp.float32(d),  # dt/2 para el primer sub-paso
+            cp.float32(dt/2), cp.float32(d),
             wx.ravel(), wy.ravel(),
             h_dx.ravel(), h_dy.ravel(),
             A.ravel(), B.ravel(),
@@ -387,25 +357,24 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
         )
     )
 
-    # Paso 1b: Difusión implícita en Y por dt/2
     compute_rhs_y_kernel(
-        blocks_2d, threads,
+        grid_diff_adv, threads_2d,
         (
             I_star.ravel(), S.ravel(), rhs_y.ravel(),
             beta.ravel(), gamma.ravel(),
-            D.ravel(), cp.float32(dt), cp.float32(d),  # dt total para alpha
+            D.ravel(), cp.float32(dt), cp.float32(d),
             cp.int32(ny), cp.int32(nx), cp.int32(n_batch),
             vegetacion.ravel()
         )
     )
-    
-    # Resolver sistemas tridiagonales en Y
-    c_prime_y = cp.zeros((nx, ny), dtype=cp.float32)
-    d_prime_y = cp.zeros((nx, ny), dtype=cp.float32)
-    blocks_y_solve = ((nx + 15) // 16,)
-    
+
+    c_prime_y = cp.zeros((n_batch, nx, ny), dtype=cp.float32)
+    d_prime_y = cp.zeros((n_batch, nx, ny), dtype=cp.float32)
+    threads_y_solve = (16, 1)
+    grid_y_solve = ((nx + threads_y_solve[0] - 1) // threads_y_solve[0], n_batch)
+
     solve_tridiagonal_y_global_kernel(
-        blocks_y_solve, (16,),
+        grid_y_solve, threads_y_solve,
         (
             rhs_y.ravel(), I_star.ravel(), S_half.ravel(),
             c_prime_y.ravel(), d_prime_y.ravel(),
@@ -416,15 +385,14 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
         )
     )
 
-    ############################## SEGUNDO SUB-PASO (dt/2) ##############################
-    # Paso 2a: Reacción y Advección explícitas por dt/2 adicional
+    # --- Segundo semi-paso (dt/2) ---
     reaction_advection_kernel_raw(
-        blocks_2d, threads,
+        grid_diff_adv, threads_2d,
         (
             S_half.ravel(), I_star.ravel(), R_half.ravel(),
             S_new.ravel(), I_new.ravel(), R_new.ravel(),
             beta.ravel(), gamma.ravel(),
-            cp.float32(dt/2), cp.float32(d),  # dt/2 para el segundo sub-paso
+            cp.float32(dt/2), cp.float32(d),
             wx.ravel(), wy.ravel(),
             h_dx.ravel(), h_dy.ravel(),
             A.ravel(), B.ravel(),
@@ -433,34 +401,35 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
         )
     )
 
-    # Paso 2b: Difusión implícita en X por dt/2
     compute_rhs_x_kernel(
-        blocks_2d, threads,
+        grid_diff_adv, threads_2d,
         (
             I_new.ravel(), S_half.ravel(), rhs_x.ravel(),
-            beta.ravel(), gamma.ravel(),    
+            beta.ravel(), gamma.ravel(),
             D.ravel(), cp.float32(dt), cp.float32(d),
             cp.int32(ny), cp.int32(nx), cp.int32(n_batch),
             vegetacion.ravel()
         )
     )
-    
-    # Resolver sistemas tridiagonales en X
-    c_prime_x = cp.zeros((ny, nx), dtype=cp.float32)
-    d_prime_x = cp.zeros((ny, nx), dtype=cp.float32)
-    blocks_x_solve = ((ny + 15) // 16,)
-    
+
+    c_prime_x = cp.zeros((n_batch, ny, nx), dtype=cp.float32)
+    d_prime_x = cp.zeros((n_batch, ny, nx), dtype=cp.float32)
+    threads_x_solve = (16,)
+    grid_x_solve = ((ny + threads_x_solve[0] - 1) // threads_x_solve[0], 1, n_batch)
+
     solve_tridiagonal_x_global_kernel(
-        blocks_x_solve, (16,),
+        grid_x_solve, threads_x_solve,
         (
             rhs_x.ravel(), I_new.ravel(), S_new.ravel(),
             c_prime_x.ravel(), d_prime_x.ravel(),
-            beta.ravel(), gamma.ravel(), 
+            beta.ravel(), gamma.ravel(),
             D.ravel(), cp.float32(dt), cp.float32(d),
             cp.int32(ny), cp.int32(nx), cp.int32(n_batch),
             vegetacion.ravel()
         )
     )
+
+    # In-place; no return necesario.
 
 ############################## CONDICIÓN DE COURANT ###############################################
 

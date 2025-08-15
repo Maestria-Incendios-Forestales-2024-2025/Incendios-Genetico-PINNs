@@ -155,11 +155,6 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
     I_total = cp.zeros(num_steps)
     R_total = cp.zeros(num_steps)
 
-    start = cp.cuda.Event()
-    end = cp.cuda.Event()
-
-    start.record()
-
     # Definir arrays de estado
     S_new = cp.empty_like(S)
     I_new = cp.empty_like(I)
@@ -169,6 +164,11 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
 
     S, I, R, S_new, I_new, R_new, beta_veg, gamma, wx, wy, h_dx_mapa, h_dy_mapa = ensure_batch_dim(
     S, I, R, S_new, I_new, R_new, beta_veg, gamma, wx, wy, h_dx_mapa, h_dy_mapa)
+
+    start = cp.cuda.Event()
+    end = cp.cuda.Event()
+
+    start.record()
 
     # Iterar sobre las simulaciones
     for t in range(num_steps):
@@ -219,8 +219,9 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
         #     print(f'Valor máximo de R: {R.max()}')
         #     print(f'Valor mínimo de R: {R.min()}')
 
-        #     mask = (vegetacion == 1)
-        #     print(f'Valor máximo de R en no combustibles: {R[mask].max()}')
+        #     mask = (cp.squeeze(vegetacion) == 1)
+        #     R_squeeze = cp.squeeze(R)
+        #     print(f'Valor máximo de R en no combustibles: {R_squeeze[mask].max()}')
 
         # var_poblacion += cp.abs(suma_total - pob_total[t-1]) if t > 0 else 0
 
