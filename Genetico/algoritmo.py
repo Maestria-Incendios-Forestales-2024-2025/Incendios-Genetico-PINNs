@@ -1,11 +1,10 @@
 import cupy as cp  # type: ignore
-import csv
-import sys
-import os
+import csv, os, sys
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
 from fitness import aptitud_batch
+from fitness import aptitud_batch
 from config import d, dt
-from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada
+from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada, leer_incendio_referencia
 
 # Agregar el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -20,7 +19,6 @@ wx = datos["wx"]
 wy = datos["wy"]
 h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
-area_quemada = datos["area_quemada"]
 
 ############################## CHEQUEO DE CONDICIÓN DE COURANT ###############################################
 
@@ -46,9 +44,18 @@ def validate_courant_and_adjust(D, A, B):
             break
     return D, A, B
 
+############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
+
+def validate_ignition_point(x, y, incendio_referencia, limite_parametros):
+    """Valida que el punto de ignición tenga combustible."""
+    lim_x, lim_y = limite_parametros[3], limite_parametros[4]
+    while vegetacion[int(y), int(x)] <= 2 or incendio_referencia[int(y), int(x)] <= 0.001:
+        x, y = float(cp.random.randint(lim_x[0], lim_x[1])), float(cp.random.randint(lim_y[0], lim_y[1]))
+    return x, y
+
 ############################## PROCESAMIENTO EN BATCH ###############################################
 
-def procesar_poblacion_batch(poblacion, batch_size=10):
+def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_parametros, num_steps=10000, batch_size=10):
     """
     Procesa una población en batches para aprovechar el paralelismo.
     
@@ -60,6 +67,9 @@ def procesar_poblacion_batch(poblacion, batch_size=10):
         Lista de resultados con fitness calculado
     """  
     resultados = []
+
+    incendio_referencia = leer_incendio_referencia(ruta_incendio_referencia)
+    celdas_quemadas_referencia = cp.where(incendio_referencia > 0.001, 1, 0)
     
     for i in range(0, len(poblacion), batch_size):
         batch = poblacion[i:i+batch_size]
@@ -84,11 +94,14 @@ def procesar_poblacion_batch(poblacion, batch_size=10):
         for D, A, B, x, y, betas, gammas in parametros_batch:
             # Validar y ajustar parámetros
             D, A, B = validate_courant_and_adjust(D, A, B)
+            x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
+            
+            parametros_batch.append((D, A, B, x, y))
             x, y = validate_ignition_point(x, y)
             parametros_validados.append((D, A, B, x, y, betas, gammas))
         
         # Calcular fitness en batch
-        fitness_values = aptitud_batch(parametros_validados)
+        fitness_values = aptitud_batch(parametros_validados, celdas_quemadas_referencia, num_steps)
         
         # Agregar resultados
         for j, (params, fitness) in enumerate(zip(parametros_validados, fitness_values)):
@@ -105,33 +118,16 @@ def procesar_poblacion_batch(poblacion, batch_size=10):
     
     return resultados
 
-############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
-
-def validate_ignition_point(x, y):
-    """Valida que el punto de ignición tenga combustible."""
-    
-    iteraciones = 0
-    while vegetacion[int(y), int(x)] <= 2 and area_quemada[int(y), int(x)] <= 0.001:
-        iteraciones += 1
-        x, y = float(cp.random.randint(300, 720)), float(cp.random.randint(400, 800))
-        
-        # Evitar bucles infinitos
-        if iteraciones > 100:
-            print(f"Warning: Validación punto de ignición tomó {iteraciones} iteraciones")
-            break
-        
-    return x, y
-
 ############################## ALGORITMO GENÉTICO #########################################################
 
-def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo_preentrenado=None, batch_size=10):
+def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, archivo_preentrenado=None, batch_size=10):
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
     
     # Obtener el task_id del SGE
     task_id = os.environ.get('JOB_ID', 'default')
     
     # Crear la carpeta de resultados con el task_id
-    resultados_dir = f'Genetico/resultados/task_{task_id}'
+    resultados_dir = f'resultados/task_{task_id}'
     os.makedirs(resultados_dir, exist_ok=True)
 
     # Cargar población inicial (preentrenada o nueva)
@@ -162,7 +158,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo
     # Procesar población inicial en batch (solo si no tenemos datos preentrenados con fitness)
     if not archivo_preentrenado or len(combinaciones[0]) != 6:
         print("Procesando población inicial en batch...")
-        resultados = procesar_poblacion_batch(combinaciones, batch_size)
+        resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, batch_size=batch_size)
 
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 
@@ -182,10 +178,10 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, archivo
             new_population.extend([child1, child2]) # Estos hijos pasan a formar parte de la nueva población
 
         population = cp.array(new_population)
-        
+
         # Procesar nueva población en batch
         print(f"Procesando generación {gen+1} en batch...")
-        resultados = procesar_poblacion_batch(population, batch_size)
+        resultados = procesar_poblacion_batch(population, ruta_incendio_referencia, limite_parametros, batch_size=batch_size)
 
         peor_idx = max(range(len(resultados)), key=lambda i: resultados[i]["fitness"])
         resultados[peor_idx] = elite  # Mantener el mejor individuo de la generación anterior

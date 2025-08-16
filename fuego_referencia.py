@@ -209,6 +209,11 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
         S_total[t] = suma_S
         I_total[t] = suma_I
         R_total[t] = suma_R
+        suma_total = suma_S + suma_I + suma_R
+        pob_total[t] = suma_total
+        S_total[t] = suma_S
+        I_total[t] = suma_I
+        R_total[t] = suma_R
 
         if (t % 500 == 0) or (t == num_steps - 1):
             print(f"Paso {t}: Población total = {suma_total}, Susceptibles = {suma_S}, Infectados = {suma_I}, Recuperados = {suma_R}")

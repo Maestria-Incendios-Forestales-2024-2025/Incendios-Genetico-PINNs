@@ -4,6 +4,8 @@ from config import d, dt, cota
 from lectura_datos import preprocesar_datos
 from algoritmo import genetic_algorithm
 
+print(cp.cuda.runtime.getDeviceProperties(0)['name'])
+
 ############################## CARGADO DE MAPAS #######################################################
 
 datos = preprocesar_datos()
@@ -11,6 +13,10 @@ wx = datos["wx"]
 wy = datos["wy"]
 h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
+
+############################## INCENDIO DE REFERENCIA ####################################################
+
+ruta_incendio_referencia = 'c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/area_quemada_SM.asc'
 
 ############################## CONDICIÓN DE COURANT PARA LOS TÉRMINOS DIFUSIVOS Y ADVECTIVOS ############
 
@@ -31,7 +37,10 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 # Ejecutar el GA con procesamiento en batch
-resultados = genetic_algorithm(tamano_poblacion=10, generaciones=1, limite_parametros=limite_parametros, batch_size=10)
+resultados = genetic_algorithm(tamano_poblacion=10, generaciones=1, limite_parametros=limite_parametros,
+                               ruta_incendio_referencia=ruta_incendio_referencia, 
+                               archivo_preentrenado='Genetico/resultados/task_1811150/resultados_generacion_13.csv',  
+                               batch_size=2)
 
 # Sincronizar después de completar la ejecución
 cp.cuda.Stream.null.synchronize()

@@ -1,40 +1,13 @@
 import cupy as cp # type: ignore
-from config import d, dt, num_steps
+from config import d, dt
 from lectura_datos import preprocesar_datos
+from lectura_datos import leer_incendio_referencia
 import sys
 import os
 
 # Agrega el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modelo_rdc import spread_infection_raw
-
-############################## FUNCIÓN PARA AGREGAR UNA DIMENSIÓN ###############################################
-
-def ensure_batch_dim(*arrays):
-    return [arr if arr.ndim == 3 else arr[cp.newaxis, ...] for arr in arrays]
-
-############################## UTILIDADES PARA PARÁMETROS DE VEGETACIÓN ###############################################
-
-def get_vegetation_info(vegetacion):
-    """
-    Obtiene información sobre los tipos de vegetación en el mapa.
-    
-    Returns:
-        dict: Información sobre tipos de vegetación
-    """
-    veg_types = cp.unique(vegetacion)
-    veg_counts = {int(vt): int(cp.sum(vegetacion == vt)) for vt in veg_types}
-    
-    print("Información de vegetación:")
-    for veg_type, count in veg_counts.items():
-        percentage = (count / (ny * nx)) * 100
-        print(f"  Tipo {veg_type}: {count} celdas ({percentage:.1f}%)")
-    
-    return {
-        "types": [int(vt) for vt in veg_types],
-        "counts": veg_counts,
-        "total_types": len(veg_types)
-    }
 
 ############################## CARGADO DE MAPAS ###############################################
 
@@ -47,13 +20,6 @@ h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
 area_quemada = datos["area_quemada"]
 ny, nx = datos["ny"], datos["nx"]
-# Obtener información de vegetación al inicializar
-veg_info = get_vegetation_info(vegetacion)
-
-############################## INCENDIO DE REFERENCIA ###############################################
-
-area_quemada = datos["area_quemada"]
-burnt_cells = cp.where(area_quemada > 0.001, 1, 0)  # Celdas quemadas en el mapa de referencia
 
 ############################## FUNCIÓN PARA MAPEAR PARÁMETROS DE VEGETACIÓN ###############################################
 
@@ -108,7 +74,7 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion):
 
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS POR BATCH ###############################################
 
-def aptitud_batch(parametros_batch):
+def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     """
     Calcula el fitness para múltiples combinaciones de parámetros en paralelo.
     
@@ -167,6 +133,8 @@ def aptitud_batch(parametros_batch):
 
     # Simular en paralelo
     simulaciones_validas = cp.ones(batch_size, dtype=cp.bool_)
+
+    print(f'Numero de pasos a simular: {num_steps}')
     paso_explosion = cp.full(batch_size, -1, dtype=cp.int32)  # -1 significa no explotó
     
     for t in range(num_steps):
