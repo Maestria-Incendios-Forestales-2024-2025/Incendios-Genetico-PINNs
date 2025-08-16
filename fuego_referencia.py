@@ -98,7 +98,7 @@ np.save("gamma.npy", gamma.get())
 beta_veg = cupyx.scipy.ndimage.gaussian_filter(beta_veg, sigma=10.0)
 gamma = cupyx.scipy.ndimage.gaussian_filter(gamma, sigma=10.0)
 
-dt = cp.float32(2/3) # Paso temporal. Si medimos el tiempo en horas, 1/2 indica un paso de 30 minutos
+dt = cp.float32(6) # Paso temporal. Si medimos el tiempo en horas, 1 indica un paso de 1 hora
 
 # Transformación del viento a coordenadas cartesianas
 # El viento está medido en km/h. En m/h el viento es una cantidad enorme, por eso
@@ -113,10 +113,10 @@ wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
 wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
 
 # Constante A adimensional de viento
-A = cp.float32(1e-4) # 10^-3 está al doble del límite de estabilidad
+A = cp.float32(1e-5) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
-B = cp.float32(1) # m/h
+B = cp.float32(0.1) # m/h
 
 D = cp.asarray(D, dtype=cp.float32).reshape(1)
 A = cp.asarray(A, dtype=cp.float32).reshape(1)
@@ -149,7 +149,7 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
     var_poblacion = 0
 
     # Inicializar arrays de cupy para almacenar los resultados
-    num_steps = 2000
+    num_steps = 500
     pob_total = cp.zeros(num_steps)
     S_total = cp.zeros(num_steps)
     I_total = cp.zeros(num_steps)
@@ -179,51 +179,51 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
         I, I_new = I_new, I
         R, R_new = R_new, R
 
-        # if not cp.all((S <= 1) & (S >= 0)):
-        #     # print(f"Error: Valores de S fuera de rango en el paso {t}")
-        #     celdas_rotas += cp.sum((S < 0) | (S > 1))
-        #     # break
+        if not cp.all((S <= 1) & (S >= 0)):
+            # print(f"Error: Valores de S fuera de rango en el paso {t}")
+            celdas_rotas += cp.sum((S < 0) | (S > 1))
+            # break
 
-        # if not cp.all((I <= 1) & (I >= 0)):
-        #     # print(f"Error: Valores de I fuera de rango en el paso {t}")
-        #     celdas_rotas += cp.sum((I < 0) | (I > 1))
-        #     # print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
-        #     # print(f'Valor mínimo de I: {I.min()}')
-        #     # print(f'Valor máximo de I: {I.max()}')
-        #     # break
+        if not cp.all((I <= 1) & (I >= 0)):
+            # print(f"Error: Valores de I fuera de rango en el paso {t}")
+            celdas_rotas += cp.sum((I < 0) | (I > 1))
+            # print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
+            # print(f'Valor mínimo de I: {I.min()}')
+            # print(f'Valor máximo de I: {I.max()}')
+            # break
 
-        # if not cp.all((R <= 1) & (R >= 0)):
-        #     # print(f"Error: Valores de R fuera de rango en el paso {t}")
-        #     celdas_rotas += cp.sum((R < 0) | (R > 1))
-        #     # print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
-        #     # print(f'Valor mínimo de R: {R.min()}')
-        #     # print(f'Valor máximo de R: {R.max()}')
-        #     # break
+        if not cp.all((R <= 1) & (R >= 0)):
+            # print(f"Error: Valores de R fuera de rango en el paso {t}")
+            celdas_rotas += cp.sum((R < 0) | (R > 1))
+            # print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
+            # print(f'Valor mínimo de R: {R.min()}')
+            # print(f'Valor máximo de R: {R.max()}')
+            # break
 
-        # suma_S = S.sum() / (nx*ny)
-        # suma_I = I.sum() / (nx*ny)
-        # suma_R = R.sum() / (nx*ny)
+        suma_S = S.sum() / (nx*ny)
+        suma_I = I.sum() / (nx*ny)
+        suma_R = R.sum() / (nx*ny)
 
-        # suma_total = suma_S + suma_I + suma_R
-        # pob_total[t] = suma_total
-        # S_total[t] = suma_S
-        # I_total[t] = suma_I
-        # R_total[t] = suma_R
+        suma_total = suma_S + suma_I + suma_R
+        pob_total[t] = suma_total
+        S_total[t] = suma_S
+        I_total[t] = suma_I
+        R_total[t] = suma_R
 
-        # if (t % 500 == 0) or (t == num_steps - 1):
-        #     print(f"Paso {t}: Población total = {suma_total}, Susceptibles = {suma_S}, Infectados = {suma_I}, Recuperados = {suma_R}")
-        #     print(f'Valor máximo de S: {S.max()}')
-        #     print(f'Valor mínimo de S: {S.min()}')
-        #     print(f'Valor máximo de I: {I.max()}')
-        #     print(f'Valor mínimo de I: {I.min()}')
-        #     print(f'Valor máximo de R: {R.max()}')
-        #     print(f'Valor mínimo de R: {R.min()}')
+        if (t % 500 == 0) or (t == num_steps - 1):
+            print(f"Paso {t}: Población total = {suma_total}, Susceptibles = {suma_S}, Infectados = {suma_I}, Recuperados = {suma_R}")
+            print(f'Valor máximo de S: {S.max()}')
+            print(f'Valor mínimo de S: {S.min()}')
+            print(f'Valor máximo de I: {I.max()}')
+            print(f'Valor mínimo de I: {I.min()}')
+            print(f'Valor máximo de R: {R.max()}')
+            print(f'Valor mínimo de R: {R.min()}')
 
-        #     mask = (cp.squeeze(vegetacion) == 1)
-        #     R_squeeze = cp.squeeze(R)
-        #     print(f'Valor máximo de R en no combustibles: {R_squeeze[mask].max()}')
+            mask = (cp.squeeze(vegetacion) == 1)
+            R_squeeze = cp.squeeze(R)
+            print(f'Valor máximo de R en no combustibles: {R_squeeze[mask].max()}')
 
-        # var_poblacion += cp.abs(suma_total - pob_total[t-1]) if t > 0 else 0
+        var_poblacion += cp.abs(suma_total - pob_total[t-1]) if t > 0 else 0
 
     end.record()  # Marca el final en GPU
     end.synchronize() # Sincroniza y mide el tiempo
