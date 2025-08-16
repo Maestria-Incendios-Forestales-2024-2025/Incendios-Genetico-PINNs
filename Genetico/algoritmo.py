@@ -88,16 +88,13 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
             gammas = gammas.tolist()
 
             parametros_batch.append((D, A, B, x, y, betas, gammas))
-        
+
         # Validar parámetros
         parametros_validados = []
         for D, A, B, x, y, betas, gammas in parametros_batch:
             # Validar y ajustar parámetros
             D, A, B = validate_courant_and_adjust(D, A, B)
             x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
-            
-            parametros_batch.append((D, A, B, x, y))
-            x, y = validate_ignition_point(x, y)
             parametros_validados.append((D, A, B, x, y, betas, gammas))
         
         # Calcular fitness en batch
@@ -148,11 +145,11 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         else:
             # Datos sin fitness, procesar normalmente
             print("Datos preentrenados sin fitness. Calculando fitness...")
-            resultados = procesar_poblacion_batch(combinaciones, batch_size)
+            resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, batch_size=batch_size)
     else:
         combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
-        resultados = procesar_poblacion_batch(combinaciones, batch_size)
-    
+        resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, batch_size=batch_size)
+
     mutation_rate = 0.3
 
     # Procesar población inicial en batch (solo si no tenemos datos preentrenados con fitness)

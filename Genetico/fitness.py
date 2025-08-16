@@ -7,7 +7,7 @@ import os
 
 # Agrega el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from modelo_rdc import spread_infection_raw
+from modelo_rdc import spread_infection_adi
 
 ############################## CARGADO DE MAPAS ###############################################
 
@@ -18,7 +18,6 @@ wx = datos["wx"]
 wy = datos["wy"]
 h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
-area_quemada = datos["area_quemada"]
 ny, nx = datos["ny"], datos["nx"]
 
 ############################## FUNCIÓN PARA MAPEAR PARÁMETROS DE VEGETACIÓN ###############################################
@@ -43,8 +42,6 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion):
     
     # Obtener tipos únicos de vegetación
     veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
-
-    print(f"Tipos de vegetación únicos: {veg_types}")
     
     # Para cada simulación en el batch
     for i, params in enumerate(parametros_batch):
@@ -84,18 +81,6 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     Returns:
         Lista de valores de fitness
     """
-    batch_size = len(parametros_batch)
-    
-    # VALIDACIÓN TEMPRANA: Verificar condición de estabilidad
-    dt = 1/6  # Tu dt actual
-    for i, params in enumerate(parametros_batch):
-        if len(params) >= 7:
-            beta_params = params[5]
-            gamma_params = params[6]
-            for j in range(len(beta_params)):
-                beta_gamma_sum = beta_params[j] + gamma_params[j]
-                if dt >= 1/beta_gamma_sum:
-                    print(f"⚠️ ADVERTENCIA Sim {i}, Veg {j}: β+γ={beta_gamma_sum:.3f}, dt_max={1/beta_gamma_sum:.4f} < dt={dt:.4f}")
     
     # Resto del código original...
     batch_size = len(parametros_batch)
@@ -139,12 +124,12 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     
     for t in range(num_steps):
         # Llamar al kernel con todos los parámetros necesarios
-        spread_infection_raw(
+        spread_infection_adi(
             S=S_batch, I=I_batch, R=R_batch, 
             S_new=S_new_batch, I_new=I_new_batch, R_new=R_new_batch,
             dt=dt, d=d, beta=beta_batch, gamma=gamma_batch,
             D=D_batch, wx=wx_batch, wy=wy_batch, 
-            h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch
+            h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch, vegetacion=vegetacion
         )
         
         # Intercambiar arrays

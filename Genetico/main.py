@@ -26,7 +26,7 @@ B_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2))) # contsta
 
 ############################## EJECUCIÓN DEL ALGORITMO ###############################################
 
-limite_beta = [(0.01, 0.3)] * 5  # Límites para beta_veg
+limite_beta = [(0.01, 2.0)] * 5  # Límites para beta_veg
 limite_gamma = [(0.01, 0.3)] * 5  # Límites para gamma
 
 # Población aleatoria inicial (D, A, B, x, y)
@@ -39,7 +39,7 @@ start_time = time.time()
 # Ejecutar el GA con procesamiento en batch
 resultados = genetic_algorithm(tamano_poblacion=10, generaciones=1, limite_parametros=limite_parametros,
                                ruta_incendio_referencia=ruta_incendio_referencia, 
-                               archivo_preentrenado='Genetico/resultados/task_1811150/resultados_generacion_13.csv',  
+                               #archivo_preentrenado='Genetico/resultados/task_1811150/resultados_generacion_13.csv',  
                                batch_size=2)
 
 # Sincronizar después de completar la ejecución
