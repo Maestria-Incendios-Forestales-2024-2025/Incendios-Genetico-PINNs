@@ -7,7 +7,7 @@ import os
 
 # Agrega el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from modelo_rdc import spread_infection_adi
+from modelo_rdc import spread_infection_adi, spread_infection_explicit_raw
 
 ############################## CARGADO DE MAPAS ###############################################
 
@@ -84,6 +84,8 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     
     # Resto del código original...
     batch_size = len(parametros_batch)
+
+    print(f'Batch size: {batch_size}')
     
     # Inicializar arrays para el batch
     S_batch = cp.ones((batch_size, ny, nx), dtype=cp.float32)
@@ -110,7 +112,8 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     wy_batch = cp.broadcast_to(wy, (batch_size, ny, nx))
     h_dx_batch = cp.broadcast_to(h_dx_mapa, (batch_size, ny, nx))
     h_dy_batch = cp.broadcast_to(h_dy_mapa, (batch_size, ny, nx))
-    
+    vegetacion_batch = cp.broadcast_to(vegetacion, (batch_size, ny, nx))
+
     # Crear arrays de parámetros D, A, B para cada simulación
     D_batch = cp.array([param[0] for param in parametros_batch], dtype=cp.float32)
     A_batch = cp.array([param[1] for param in parametros_batch], dtype=cp.float32)
@@ -124,14 +127,21 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     
     for t in range(num_steps):
         # Llamar al kernel con todos los parámetros necesarios
-        spread_infection_adi(
+        # spread_infection_adi(
+        #     S=S_batch, I=I_batch, R=R_batch, 
+        #     S_new=S_new_batch, I_new=I_new_batch, R_new=R_new_batch,
+        #     dt=dt, d=d, beta=beta_batch, gamma=gamma_batch,
+        #     D=D_batch, wx=wx_batch, wy=wy_batch, 
+        #     h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch, vegetacion=vegetacion
+        # )
+        spread_infection_explicit_raw(
             S=S_batch, I=I_batch, R=R_batch, 
             S_new=S_new_batch, I_new=I_new_batch, R_new=R_new_batch,
             dt=dt, d=d, beta=beta_batch, gamma=gamma_batch,
             D=D_batch, wx=wx_batch, wy=wy_batch, 
-            h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch, vegetacion=vegetacion
+            h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch, vegetacion=vegetacion_batch
         )
-        
+
         # Intercambiar arrays
         S_batch, S_new_batch = S_new_batch, S_batch
         I_batch, I_new_batch = I_new_batch, I_batch
@@ -139,7 +149,9 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
         
         # Verificar si alguna simulación explota
         # Condiciones más estrictas para detectar problemas temprano
-        validas = cp.all((R_batch >= -1e-6) & (R_batch <= 1 + 1e-6), axis=(1, 2))
+        validas = cp.all((R_batch >= -1e-6) & (R_batch <= 1 + 1e-6) & 
+                         (I_batch >= -1e-6) & (I_batch <= 1 + 1e-6) &
+                         (S_batch >= -1e-6) & (S_batch <= 1 + 1e-6), axis=(1, 2))
         
         # Detectar valores extremos que pueden causar problemas
         valores_extremos = cp.any((R_batch > 10) | (R_batch < -10), axis=(1, 2))
@@ -157,15 +169,15 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
             break
             
         # Verificación cada 100 pasos para detectar tendencias problemáticas
-        if t % 100 == 0 and t > 0:
-            max_R = cp.max(R_batch, axis=(1, 2))
-            min_R = cp.min(R_batch, axis=(1, 2))
-            sims_problema = (max_R > 1.1) | (min_R < -0.1)
-            if cp.any(sims_problema):
-                indices_problema = cp.where(sims_problema)[0]
-                print(f"Paso {t}: Simulaciones con valores sospechosos: {[int(x) for x in indices_problema]}")
-                print(f"  Max R: {[float(max_R[i]) for i in indices_problema]}")
-                print(f"  Min R: {[float(min_R[i]) for i in indices_problema]}")
+        # if t % 100 == 0 and t > 0:
+        #     max_R = cp.max(R_batch, axis=(1, 2))
+        #     min_R = cp.min(R_batch, axis=(1, 2))
+        #     sims_problema = (max_R > 1.1) | (min_R < -0.1)
+        #     if cp.any(sims_problema):
+        #         indices_problema = cp.where(sims_problema)[0]
+        #         print(f"Paso {t}: Simulaciones con valores sospechosos: {[int(x) for x in indices_problema]}")
+        #         print(f"  Max R: {[float(max_R[i]) for i in indices_problema]}")
+        #         print(f"  Min R: {[float(min_R[i]) for i in indices_problema]}")
     
     # Calcular fitness para cada simulación en paralelo
     fitness_values = []
