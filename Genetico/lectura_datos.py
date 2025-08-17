@@ -18,14 +18,14 @@ def leer_asc(ruta):
 def leer_incendio_referencia(ruta):
     _, extension = os.path.splitext(ruta)
     if extension == '.asc':
-        mapa_incendio_referencia = leer_asc(ruta)
+        mapa_incendio_referencia = cp.flipud(leer_asc(ruta))
     elif extension == '.npy':
         mapa_incendio_referencia = cp.load(ruta)
         if mapa_incendio_referencia.ndim == 3:
             mapa_incendio_referencia = mapa_incendio_referencia[0]
     else:
         raise ValueError(f'Extensión no reconocida: {extension}')
-    return cp.flipud(mapa_incendio_referencia)
+    return mapa_incendio_referencia
     
 ############################## CALCULO A PARTIR DE MAPAS ###############################################
 
