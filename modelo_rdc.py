@@ -467,7 +467,7 @@ __global__ void spread_infection_kernel_raw(const float* S, const float* I, cons
                                   const float* wx, const float* wy,
                                   const float* h_dx, const float* h_dy,
                                   const float* A, const float* B,
-                                  const int ny, const int nx, const int n_batch) 
+                                  const int ny, const int nx, const int n_batch, const float* vegetacion) 
 {
     int j = blockIdx.x * blockDim.x + threadIdx.x;  // x
     int i = blockIdx.y * blockDim.y + threadIdx.y;  // y
@@ -479,6 +479,13 @@ __global__ void spread_infection_kernel_raw(const float* S, const float* I, cons
     int idx = b * ny * nx + idx2D;
 
     if (i == 0 || i == ny-1 || j == 0 || j == nx-1) {
+        S_new[idx] = 0.0f;
+        I_new[idx] = 0.0f;
+        R_new[idx] = 0.0f;
+        return;
+    }
+
+    if (vegetacion[idx] <= 2.0f) {
         S_new[idx] = 0.0f;
         I_new[idx] = 0.0f;
         R_new[idx] = 0.0f;
@@ -510,11 +517,6 @@ __global__ void spread_infection_kernel_raw(const float* S, const float* I, cons
                    + s * laplacian_I - dt / d * (adv_x * I_dx + adv_y * I_dy);
     float R_temp = R_val + dt * gamma_val * I_val;
 
-    if (beta_val == 0.0f) {
-        S_temp = 1.0f;
-        I_temp = 0.0f;
-    }
-
     S_new[idx] = S_temp;
     I_new[idx] = I_temp;
     R_new[idx] = R_temp;
@@ -526,7 +528,7 @@ mod = cp.RawModule(code=kernel_code)
 spread_kernel_raw = mod.get_function('spread_infection_kernel_raw')
 
 def spread_infection_explicit_raw(S, I, R, S_new, I_new, R_new, 
-                                dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B):
+                                dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B, vegetacion):
 
     n_batch, ny, nx = S.shape
     threads = (16, 16)
@@ -544,6 +546,6 @@ def spread_infection_explicit_raw(S, I, R, S_new, I_new, R_new,
             wx.ravel(), wy.ravel(),
             h_dx.ravel(), h_dy.ravel(),
             A.ravel(), B.ravel(),
-            cp.int32(ny), cp.int32(nx), cp.int32(n_batch)
+            cp.int32(ny), cp.int32(nx), cp.int32(n_batch), vegetacion.ravel()
         )
     )
