@@ -2,7 +2,6 @@ import cupy as cp  # type: ignore
 import csv, os, sys
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
 from fitness import aptitud_batch
-from fitness import aptitud_batch
 from config import d, dt
 from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada, leer_incendio_referencia
 
@@ -96,7 +95,7 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
             D, A, B = validate_courant_and_adjust(D, A, B)
             x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
             parametros_validados.append((D, A, B, x, y, betas, gammas))
-        
+
         # Calcular fitness en batch
         fitness_values = aptitud_batch(parametros_validados, celdas_quemadas_referencia, num_steps)
         
@@ -117,7 +116,7 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
 
 ############################## ALGORITMO GENÉTICO #########################################################
 
-def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, archivo_preentrenado=None, batch_size=10):
+def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, archivo_preentrenado=None, num_steps=10000, batch_size=10):
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
     
     # Obtener el task_id del SGE
@@ -145,17 +144,12 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         else:
             # Datos sin fitness, procesar normalmente
             print("Datos preentrenados sin fitness. Calculando fitness...")
-            resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, batch_size=batch_size)
+            resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, num_steps=num_steps, batch_size=batch_size)
     else:
         combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
-        resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, batch_size=batch_size)
+        resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, num_steps=num_steps, batch_size=batch_size)
 
     mutation_rate = 0.3
-
-    # Procesar población inicial en batch (solo si no tenemos datos preentrenados con fitness)
-    if not archivo_preentrenado or len(combinaciones[0]) != 6:
-        print("Procesando población inicial en batch...")
-        resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, batch_size=batch_size)
 
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 
@@ -178,7 +172,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
 
         # Procesar nueva población en batch
         print(f"Procesando generación {gen+1} en batch...")
-        resultados = procesar_poblacion_batch(population, ruta_incendio_referencia, limite_parametros, batch_size=batch_size)
+        resultados = procesar_poblacion_batch(population, ruta_incendio_referencia, limite_parametros, num_steps=num_steps, batch_size=batch_size)
 
         peor_idx = max(range(len(resultados)), key=lambda i: resultados[i]["fitness"])
         resultados[peor_idx] = elite  # Mantener el mejor individuo de la generación anterior
@@ -192,7 +186,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         # Guardar los resultados de la generación en la carpeta específica del task_id
         csv_filename = os.path.join(resultados_dir, f'resultados_generacion_{gen+1}.csv')
         with open(csv_filename, 'w', newline='') as csvfile:
-            fieldnames = ['D', 'A', 'B', 'x', 'y', 'fitness']
+            fieldnames = ['D', 'A', 'B', 'x', 'y', 'betas', 'gammas', 'fitness']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for resultado in resultados:
@@ -201,7 +195,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
     # Guardar resultados finales con información del task
     final_csv_filename = os.path.join(resultados_dir, f'resultados_finales_task_{task_id}.csv')
     with open(final_csv_filename, 'w', newline='') as csvfile:
-        fieldnames = ['D', 'A', 'B', 'x', 'y', 'fitness']
+        fieldnames = ['D', 'A', 'B', 'x', 'y', 'betas', 'gammas', 'fitness']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         for resultado in resultados:
