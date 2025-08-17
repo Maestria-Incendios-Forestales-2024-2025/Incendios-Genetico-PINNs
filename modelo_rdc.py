@@ -293,12 +293,12 @@ __global__ void reaction_advection_kernel_raw(const float* S, const float* I, co
 '''
 
 # Compilar kernels ADI
-mod = cp.RawModule(code=kernel_code_adi)
-compute_rhs_y_kernel = mod.get_function('compute_rhs_y')
-compute_rhs_x_kernel = mod.get_function('compute_rhs_x')
-solve_tridiagonal_y_global_kernel = mod.get_function('solve_tridiagonal_y_global')
-solve_tridiagonal_x_global_kernel = mod.get_function('solve_tridiagonal_x_global')
-reaction_advection_kernel_raw = mod.get_function('reaction_advection_kernel_raw')
+mod_adi = cp.RawModule(code=kernel_code_adi)
+compute_rhs_y_kernel = mod_adi.get_function('compute_rhs_y')
+compute_rhs_x_kernel = mod_adi.get_function('compute_rhs_x')
+solve_tridiagonal_y_global_kernel = mod_adi.get_function('solve_tridiagonal_y_global')
+solve_tridiagonal_x_global_kernel = mod_adi.get_function('solve_tridiagonal_x_global')
+reaction_advection_kernel_raw = mod_adi.get_function('reaction_advection_kernel_raw')
 
 def spread_infection_adi(S, I, R, S_new, I_new, R_new,
                          dt, d, beta, gamma, D, wx, wy, h_dx, h_dy, A, B, vegetacion):
