@@ -81,13 +81,6 @@ gamma = cp.where(mask_no_veg, 0.0, gamma)
 print(f'Valores de beta: {beta_params}')
 print(f'Valores de gamma: {gamma_params}')
 
-# Parámetros del modelo SI
-# beta_veg = cp.where(vegetacion <= 2, cp.float32(0), 0.1 * vegetacion) # fracción de vegetación incéndiandose por hora
-
-# Hacemos una máscara donde vegetación <=2, gamma >> 1/dt. Sino, vale 0.1. 
-# gamma = cp.where(vegetacion <= 2, cp.float32(0), cp.float32(0.1)) # fracción de vegetación que se apaga por hora.
-                                                                    # 1/gamma es el tiempo promedio del incendio
-
 beta_veg = beta_veg.astype(cp.float32)
 gamma = gamma.astype(cp.float32)
 
@@ -98,11 +91,7 @@ np.save("gamma.npy", gamma.get())
 beta_veg = cupyx.scipy.ndimage.gaussian_filter(beta_veg, sigma=10.0)
 gamma = cupyx.scipy.ndimage.gaussian_filter(gamma, sigma=10.0)
 
-dt = cp.float32(6) # Paso temporal. Si medimos el tiempo en horas, 1 indica un paso de 1 hora
-
-# Transformación del viento a coordenadas cartesianas
-# El viento está medido en km/h. En m/h el viento es una cantidad enorme, por eso
-# la cantidad A que multiplica el viento tendría que ser pequeña. Intuición: A~10^-5
+dt = cp.float32(1/2) # Paso temporal
 
 # Convertir a radianes
 vientod_rad = vientod * cp.pi / 180
@@ -113,10 +102,10 @@ wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
 wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
 
 # Constante A adimensional de viento
-A = cp.float32(1e-5) # 10^-3 está al doble del límite de estabilidad
+A = cp.float32(5e-4) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
-B = cp.float32(0.1) # m/h
+B = cp.float32(15) # m/h
 
 D = cp.asarray(D, dtype=cp.float32).reshape(1)
 A = cp.asarray(A, dtype=cp.float32).reshape(1)
@@ -138,8 +127,8 @@ S = cp.where(vegetacion <= 2, 0, S)  # Celdas no vegetadas son susceptibles
 print(f'Se cumple la condición de Courant para el término advectivo: {courant(dt/2, D, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
 
 # Coordenadas del punto de ignición
-x_ignicion = 699
-y_ignicion = 727
+x_ignicion = 400
+y_ignicion = 600
 
 if vegetacion[y_ignicion, x_ignicion] > 2:
     # Infectados en una esquina de la grilla
@@ -180,35 +169,18 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
         R, R_new = R_new, R
 
         if not cp.all((S <= 1) & (S >= 0)):
-            # print(f"Error: Valores de S fuera de rango en el paso {t}")
             celdas_rotas += cp.sum((S < 0) | (S > 1))
-            # break
 
         if not cp.all((I <= 1) & (I >= 0)):
-            # print(f"Error: Valores de I fuera de rango en el paso {t}")
             celdas_rotas += cp.sum((I < 0) | (I > 1))
-            # print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
-            # print(f'Valor mínimo de I: {I.min()}')
-            # print(f'Valor máximo de I: {I.max()}')
-            # break
 
         if not cp.all((R <= 1) & (R >= 0)):
-            # print(f"Error: Valores de R fuera de rango en el paso {t}")
             celdas_rotas += cp.sum((R < 0) | (R > 1))
-            # print(f"Total de celdas rotas hasta el paso {t}: {celdas_rotas}")
-            # print(f'Valor mínimo de R: {R.min()}')
-            # print(f'Valor máximo de R: {R.max()}')
-            # break
 
         suma_S = S.sum() / (nx*ny)
         suma_I = I.sum() / (nx*ny)
         suma_R = R.sum() / (nx*ny)
 
-        suma_total = suma_S + suma_I + suma_R
-        pob_total[t] = suma_total
-        S_total[t] = suma_S
-        I_total[t] = suma_I
-        R_total[t] = suma_R
         suma_total = suma_S + suma_I + suma_R
         pob_total[t] = suma_total
         S_total[t] = suma_S
