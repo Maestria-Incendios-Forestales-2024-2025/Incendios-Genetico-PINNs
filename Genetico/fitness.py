@@ -133,20 +133,20 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     
     for t in range(num_steps):
         # Llamar al kernel con todos los parámetros necesarios
-        # spread_infection_adi(
-        #     S=S_batch, I=I_batch, R=R_batch, 
-        #     S_new=S_new_batch, I_new=I_new_batch, R_new=R_new_batch,
-        #     dt=dt, d=d, beta=beta_batch, gamma=gamma_batch,
-        #     D=D_batch, wx=wx_batch, wy=wy_batch, 
-        #     h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch, vegetacion=vegetacion
-        # )
-        spread_infection_explicit_raw(
+        spread_infection_adi(
             S=S_batch, I=I_batch, R=R_batch, 
             S_new=S_new_batch, I_new=I_new_batch, R_new=R_new_batch,
             dt=dt, d=d, beta=beta_batch, gamma=gamma_batch,
             D=D_batch, wx=wx_batch, wy=wy_batch, 
             h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch, vegetacion=vegetacion_batch
         )
+        # spread_infection_explicit_raw(
+        #     S=S_batch, I=I_batch, R=R_batch, 
+        #     S_new=S_new_batch, I_new=I_new_batch, R_new=R_new_batch,
+        #     dt=dt, d=d, beta=beta_batch, gamma=gamma_batch,
+        #     D=D_batch, wx=wx_batch, wy=wy_batch, 
+        #     h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch, vegetacion=vegetacion_batch
+        # )
 
         # Intercambiar arrays
         S_batch, S_new_batch = S_new_batch, S_batch
