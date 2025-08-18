@@ -1,7 +1,7 @@
 import cupy as cp # type: ignore
 from config import d, dt
 from lectura_datos import preprocesar_datos
-from lectura_datos import leer_incendio_referencia
+import cupyx.scipy.ndimage
 import sys
 import os
 
@@ -66,7 +66,13 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion):
             
             beta_batch[i] = beta_map
             gamma_batch[i] = gamma_map
-    
+
+    sigma = (0, 10.0, 10.0)
+
+    # Suavizado de los mapas
+    beta_batch = cupyx.scipy.ndimage.gaussian_filter(beta_batch, sigma=sigma)
+    gamma_batch = cupyx.scipy.ndimage.gaussian_filter(gamma_batch, sigma=sigma)
+
     return beta_batch, gamma_batch
 
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS POR BATCH ###############################################
