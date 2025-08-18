@@ -18,13 +18,14 @@ def leer_asc(ruta):
 def leer_incendio_referencia(ruta):
     _, extension = os.path.splitext(ruta)
     if extension == '.asc':
-        mapa_incendio_referencia = cp.flipud(leer_asc(ruta))
+        mapa_incendio_referencia = leer_asc(ruta)
     elif extension == '.npy':
         mapa_incendio_referencia = cp.load(ruta)
         if mapa_incendio_referencia.ndim == 3:
             mapa_incendio_referencia = mapa_incendio_referencia[0]
     else:
         raise ValueError(f'Extensión no reconocida: {extension}')
+    # return cp.flipud(mapa_incendio_referencia)
     return mapa_incendio_referencia
     
 ############################## CALCULO A PARTIR DE MAPAS ###############################################
@@ -32,6 +33,10 @@ def leer_incendio_referencia(ruta):
 def preprocesar_datos():
     datos = [leer_asc(m) for m in ruta_mapas]
     vientod, vientov, pendiente, vegetacion, orientacion = datos
+
+    # Parámetros derivados
+    beta_veg = cp.where(vegetacion <= 2, 0, 0.1 * vegetacion)
+    gamma = cp.where(vegetacion <= 2, 100, 0.1)
 
     vientod_rad = vientod * cp.pi / 180
     # Componentes cartesianas del viento:
@@ -47,6 +52,8 @@ def preprocesar_datos():
         "pendiente": cp.flipud(pendiente),
         "vegetacion": cp.flipud(vegetacion),
         "orientacion": cp.flipud(orientacion),
+        "beta_veg": cp.flipud(beta_veg),
+        "gamma": cp.flipud(gamma),
         "wx": cp.flipud(wx),
         "wy": cp.flipud(wy),
         "h_dx": cp.flipud(h_dx),
@@ -54,88 +61,112 @@ def preprocesar_datos():
         "ny": vientod.shape[0],
         "nx": vientod.shape[1],
     }
-
 ############################## CARGA DE ARCHIVO PREENTRENADO ###############################################
 
 def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros):
     """
-    Carga una población preentrenada desde un archivo CSV.
-    
-    Args:
-        archivo_preentrenado: Ruta al archivo CSV con individuos preentrenados
-        tamano_poblacion: Tamaño deseado de la población
-        limite_parametros: Límites para generar individuos adicionales si es necesario
-    
-    Returns:
-        Lista de individuos (arrays de CuPy)
+    Carga una población preentrenada desde un CSV con columnas:
+    D, A, B, x, y, beta_1..beta_5, gamma_1..gamma_5, fitness
+
+    Devuelve una lista de individuos:
+    [D, A, B, x, y, [beta1..beta5], [gamma1..gamma5], fitness]
     """
-    print(f'Cargando archivo preentrenado: {archivo_preentrenado}')
-    
-    # Verificar que el archivo existe
+
     if not os.path.exists(archivo_preentrenado):
-        print(f'ERROR: Archivo {archivo_preentrenado} no encontrado. Generando población inicial.')
+        print(f"Archivo {archivo_preentrenado} no encontrado. Generando población inicial.")
         return poblacion_inicial(tamano_poblacion, limite_parametros)
+
+    poblacion_cargada = []
+    with open(archivo_preentrenado, 'r') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                # Primeros 5 parámetros
+                parametros_basicos = [
+                    float(row['D']),
+                    float(row['A']),
+                    float(row['B']),
+                    int(float(row['x'])),
+                    int(float(row['y']))
+                ]
+
+                # Betas y gammas
+                betas = [float(row[f'beta_{i}']) for i in range(1, 6)]
+                gammas = [float(row[f'gamma_{i}']) for i in range(1, 6)]
+
+                # Fitness
+                fitness = float(row['fitness'])
+
+                # Guardar como lista de 8 elementos
+                poblacion_cargada.append(parametros_basicos + [betas, gammas, fitness])
+
+            except (ValueError, KeyError) as e:
+                print(f"WARNING: Saltando fila inválida: {row} - Error: {e}")
+                continue
+
+    # Ajustar tamaño de la población
+    num_cargados = len(poblacion_cargada)
+    if num_cargados == 0:
+        print("No se cargaron individuos válidos. Generando población inicial.")
+        return poblacion_inicial(tamano_poblacion, limite_parametros)
+
+    if num_cargados > tamano_poblacion:
+        indices = cp.random.choice(num_cargados, tamano_poblacion, replace=False)
+        poblacion_cargada = [poblacion_cargada[i] for i in indices.get()]
+    elif num_cargados < tamano_poblacion:
+        faltantes = tamano_poblacion - num_cargados
+        nuevos = poblacion_inicial(faltantes, limite_parametros)
+        # Cada nuevo individuo se convierte en 5 parámetros + listas vacías + fitness None
+        nuevos_formateados = [n + [[], [], None] for n in nuevos]
+        poblacion_cargada += nuevos_formateados
+
+    return poblacion_cargada
+
     
-    try:
-        with open(archivo_preentrenado, 'r') as f:
-            reader = csv.DictReader(f)
-            combinaciones_preentrenadas = []
+############################## GUARDADO DE RESULTADOS ###############################################
+
+def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5):
+    """
+    Guarda resultados en un archivo CSV.
+    
+    resultados: lista de diccionarios con claves 
+                ['D', 'A', 'B', 'x', 'y', 'betas', 'gammas', 'fitness']
+    resultados_dir: carpeta donde guardar
+    gen: número de generación (se incluye en el nombre del archivo)
+    n_betas: cantidad de betas esperadas por fila   
+    n_gammas: cantidad de gammas esperadas por fila
+    """
+    
+    csv_filename = os.path.join(resultados_dir, f'resultados_generacion_{gen+1}.csv')
+    
+    # Definir nombres de columnas dinámicamente
+    fieldnames = ['D', 'A', 'B', 'x', 'y'] \
+               + [f'beta_{i}' for i in range(1, n_betas+1)] \
+               + [f'gamma_{i}' for i in range(1, n_gammas+1)] \
+               + ['fitness']
+    
+    with open(csv_filename, 'w', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        for resultado in resultados:
+            row = {
+                'D': resultado['D'],
+                'A': resultado['A'],
+                'B': resultado['B'],
+                'x': resultado['x'],
+                'y': resultado['y'],
+                'fitness': resultado['fitness'],
+            }
             
-            for row in reader:
-                # Validar que todas las columnas necesarias existen
-                if all(key in row for key in ['D', 'A', 'B', 'x', 'y']):
-                    try:
-                        # Convertir a float primero y luego a int para manejar valores como "732.0"
-                        x_val = int(float(row['x']))
-                        y_val = int(float(row['y']))
-                        
-                        # Debug temporal: verificar los primeros valores
-                        if len(combinaciones_preentrenadas) < 3:
-                            print(f"DEBUG: Cargando fila {len(combinaciones_preentrenadas)+1}: x={row['x']}→{x_val}, y={row['y']}→{y_val}")
-                        
-                        # Verificar si tiene fitness
-                        if 'fitness' in row and row['fitness']:
-                            # Incluir fitness
-                            combinaciones_preentrenadas.append(
-                                cp.array([float(row['D']), float(row['A']), float(row['B']), 
-                                         x_val, y_val, float(row['fitness'])], dtype=cp.float32)
-                            )
-                        else:
-                            # Sin fitness, solo parámetros
-                            combinaciones_preentrenadas.append(
-                                cp.array([float(row['D']), float(row['A']), float(row['B']), 
-                                         x_val, y_val], dtype=cp.float32)
-                            )
-                    except (ValueError, TypeError) as e:
-                        print(f"WARNING: Saltando fila inválida: {row} - Error: {e}")
-                        continue
-        
-        # Verificar que se cargaron individuos
-        if not combinaciones_preentrenadas:
-            print('WARNING: No se encontraron individuos válidos en el archivo. Generando población inicial.')
-            return poblacion_inicial(tamano_poblacion, limite_parametros)
-        
-        # Ajustar el tamaño de la población
-        num_cargados = len(combinaciones_preentrenadas)
-        print(f'Cargados {num_cargados} individuos del archivo preentrenado.')
-        
-        if num_cargados == tamano_poblacion:
-            # Perfecto, usar todos
-            return combinaciones_preentrenadas
-        elif num_cargados > tamano_poblacion:
-            # Tomar una muestra aleatoria
-            indices = cp.random.choice(num_cargados, tamano_poblacion, replace=False)
-            combinaciones = [combinaciones_preentrenadas[i] for i in indices.get()]
-            print(f'Tomando una muestra de {tamano_poblacion} individuos del archivo.')
-            return combinaciones
-        else:
-            # Completar con individuos generados aleatoriamente
-            faltantes = tamano_poblacion - num_cargados
-            nuevos = poblacion_inicial(faltantes, limite_parametros)
-            combinaciones = combinaciones_preentrenadas + nuevos
-            print(f'Completando con {faltantes} individuos generados aleatoriamente.')
-            return combinaciones
+            # Expandir betas
+            for i, beta in enumerate(resultado['betas'], start=1):
+                row[f'beta_{i}'] = beta
             
-    except Exception as e:
-        print(f'ERROR al cargar archivo preentrenado: {e}. Generando población inicial.')
-        return poblacion_inicial(tamano_poblacion, limite_parametros)
+            # Expandir gammas
+            for i, gamma in enumerate(resultado['gammas'], start=1):
+                row[f'gamma_{i}'] = gamma
+            
+            writer.writerow(row)
+    
+    print(f"✅ Resultados guardados en {csv_filename}")
