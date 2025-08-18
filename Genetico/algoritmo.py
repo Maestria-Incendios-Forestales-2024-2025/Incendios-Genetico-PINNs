@@ -3,7 +3,7 @@ import csv, os, sys
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
 from fitness import aptitud_batch
 from config import d, dt
-from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada, leer_incendio_referencia
+from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada, leer_incendio_referencia, guardar_resultados
 
 # Agregar el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -52,6 +52,14 @@ def validate_ignition_point(x, y, incendio_referencia, limite_parametros):
         x, y = float(cp.random.randint(lim_x[0], lim_x[1])), float(cp.random.randint(lim_y[0], lim_y[1]))
     return x, y
 
+############################## VALIDACIÓN DE BETA Y GAMMA ###############################################
+
+def validate_beta_gamma(betas, gammas):
+    """Valida los parámetros beta y gamma. Beta[i] > Gamma[i] para todo i"""
+    mask = gammas >= betas
+    gammas[mask] = 0.9 * betas[mask]
+    return betas, gammas
+
 ############################## PROCESAMIENTO EN BATCH ###############################################
 
 def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_parametros, num_steps=10000, batch_size=10):
@@ -94,6 +102,7 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
             # Validar y ajustar parámetros
             D, A, B = validate_courant_and_adjust(D, A, B)
             x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
+            betas, gammas = validate_beta_gamma(betas, gammas)
             parametros_validados.append((D, A, B, x, y, betas, gammas))
 
         # Calcular fitness en batch
@@ -129,22 +138,6 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
     # Cargar población inicial (preentrenada o nueva)
     if archivo_preentrenado:
         combinaciones = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros)
-        
-        # Verificar si los datos preentrenados incluyen fitness
-        if len(combinaciones) > 0 and len(combinaciones[0]) == 6:  # D, A, B, x, y, fitness
-            print("Datos preentrenados con fitness detectados. Convirtiendo a formato de resultados...")
-            resultados = []
-            for individuo in combinaciones:
-                D, A, B, x, y, fitness = individuo
-                resultados.append({
-                    "D": float(D), "A": float(A), "B": float(B), 
-                    "x": int(x), "y": int(y), "fitness": float(fitness)
-                })
-            print(f"Convertidos {len(resultados)} individuos preentrenados con fitness.")
-        else:
-            # Datos sin fitness, procesar normalmente
-            print("Datos preentrenados sin fitness. Calculando fitness...")
-            resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, num_steps=num_steps, batch_size=batch_size)
     else:
         combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
         resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, num_steps=num_steps, batch_size=batch_size)
@@ -184,23 +177,8 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         mutation_rate *= 0.99
 
         # Guardar los resultados de la generación en la carpeta específica del task_id
-        csv_filename = os.path.join(resultados_dir, f'resultados_generacion_{gen+1}.csv')
-        with open(csv_filename, 'w', newline='') as csvfile:
-            fieldnames = ['D', 'A', 'B', 'x', 'y', 'betas', 'gammas', 'fitness']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
-            for resultado in resultados:
-                writer.writerow(resultado)
+        guardar_resultados(resultados, resultados_dir, gen)
 
-    # Guardar resultados finales con información del task
-    final_csv_filename = os.path.join(resultados_dir, f'resultados_finales_task_{task_id}.csv')
-    with open(final_csv_filename, 'w', newline='') as csvfile:
-        fieldnames = ['D', 'A', 'B', 'x', 'y', 'betas', 'gammas', 'fitness']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-        for resultado in resultados:
-            writer.writerow(resultado)
-    
     print(f'Resultados guardados en: {resultados_dir}')
     print(f'Task ID: {task_id}')
 
