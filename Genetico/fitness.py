@@ -1,7 +1,7 @@
 import cupy as cp # type: ignore
 from config import d, dt
 from lectura_datos import preprocesar_datos
-import cupyx.scipy.ndimage
+import cupyx.scipy.ndimage # type: ignore
 import sys
 import os
 
@@ -211,10 +211,10 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
 
     # Procesar resultados
     for i in range(batch_size):
-        if not simulaciones_validas[i]:
-            fitness_values.append(float('inf'))
-        else:
-            fitness_values.append(float(fitness_batch[i]))
+        # if not simulaciones_validas[i]:
+        #     fitness_values.append(float('inf'))
+        # else:
+        fitness_values.append(float(fitness_batch[i]))
         
         # Información de debug
         params = parametros_batch[i]
