@@ -50,14 +50,14 @@ d = cp.float32(30) # metros
 D = cp.float32(10) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
 # Sortear valores aleatorios para beta_params y gamma_params
-rng = cp.random.default_rng(seed=45)
-beta_params = rng.uniform(0.2, 2, size=5)
-gamma_params = rng.uniform(0.05, 1, size=5)
+cp.random.seed(45)
+beta_params = cp.random.uniform(0.2, 2, size=5)
+gamma_params = cp.random.uniform(0.05, 1, size=5)
 
 # Asegurar que beta > gamma en cada posición
 for i in range(5):
     if beta_params[i] <= gamma_params[i]:
-        gamma_params[i] = beta_params[i] - rng.uniform(0.05, 0.15)
+        gamma_params[i] = beta_params[i] - cp.random.uniform(0.05, 0.15)
         if gamma_params[i] < 0.01:
             gamma_params[i] = 0.01
 
@@ -187,7 +187,7 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
         I_total[t] = suma_I
         R_total[t] = suma_R
 
-        if (t % 500 == 0) or (t == num_steps - 1):
+        if (t % 100 == 0) or (t == num_steps - 1):
             print(f"Paso {t}: Población total = {suma_total}, Susceptibles = {suma_S}, Infectados = {suma_I}, Recuperados = {suma_R}")
             print(f'Valor máximo de S: {S.max()}')
             print(f'Valor mínimo de S: {S.min()}')
@@ -214,6 +214,8 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
 
     print(f'Variación de población promedio: {var_poblacion_promedio}')
     print(f'Número de celdas rotas: {celdas_rotas}')
+    print(f'Numero de celdas quemadas: {cp.sum(R > 0.001)}')
+
 
 else:
     print("El punto de ignición corresponde a una celda no combustible.")
