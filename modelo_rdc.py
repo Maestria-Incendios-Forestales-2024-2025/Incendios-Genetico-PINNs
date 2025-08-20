@@ -39,16 +39,16 @@ __global__ void compute_rhs_y(const float* I, const float* S, float* rhs,
     float I_top = I[b*ny*nx + i_top * nx + j];
     float I_bottom = I[b*ny*nx + i_bottom * nx + j];
 
-    float S_idx = S[idx];
-    float beta_idx = beta[idx];
-    float gamma_idx = gamma[idx];
+    // float S_idx = S[idx];
+    // float beta_idx = beta[idx];
+    // float gamma_idx = gamma[idx];
 
     float alpha = D[b] * dt / (d * d);
 
-    float rhs_reaction = dt * I_idx * (beta_idx * S_idx - gamma_idx);
+    // float rhs_reaction = dt * I_idx * (beta_idx * S_idx - gamma_idx);
 
     // RHS para paso ADI en y: I + alpha/2 * Laplace_y(I)
-    rhs[idx] = 2.0f * I_idx + alpha * (I_top - 2.0f * I_idx + I_bottom) + rhs_reaction;
+    rhs[idx] = 2.0f * I_idx + alpha * (I_top - 2.0f * I_idx + I_bottom); // + rhs_reaction;
 }
 
 __global__ void compute_rhs_x(const float* I, const float* S, float* rhs,
@@ -85,16 +85,16 @@ __global__ void compute_rhs_x(const float* I, const float* S, float* rhs,
     float I_left = I[b*ny*nx + i * nx + j_left];
     float I_right = I[b*ny*nx + i * nx + j_right];
 
-    float S_idx = S[idx];
-    float beta_idx = beta[idx];
-    float gamma_idx = gamma[idx];
+    // float S_idx = S[idx];
+    // float beta_idx = beta[idx];
+    // float gamma_idx = gamma[idx];
 
     float alpha = D[b] * dt / (d * d);
 
-    float rhs_reaction = dt * I_idx * (beta_idx * S_idx - gamma_idx);
+    // float rhs_reaction = dt * I_idx * (beta_idx * S_idx - gamma_idx);
 
     // RHS para paso ADI en x: I + alpha/2 * Laplace_x(I)
-    rhs[idx] = 2.0f * I_idx + alpha * (I_right - 2.0f * I_idx + I_left) + rhs_reaction;
+    rhs[idx] = 2.0f * I_idx + alpha * (I_right - 2.0f * I_idx + I_left); // + rhs_reaction;
 }
 
 // Solver tridiagonal usando memoria global (para dominios grandes)
@@ -119,34 +119,34 @@ __global__ void solve_tridiagonal_x_global(const float* rhs, float* I, const flo
     float c_val = -alpha;        // diagonal superior
 
     // Usar memoria global - cada fila tiene su propio espacio
-    float* c_prime = c_prime_global + i * nx;
-    float* d_prime = d_prime_global + i * nx;
+    float* c_prime = c_prime_global + i * nx + b*ny*nx;
+    float* d_prime = d_prime_global + i * nx + b*ny*nx;
 
     // forward sweep
     int j = 0;
     int idx = row_offset + j;
     if (vegetacion[idx] <= 2.0f) {
         I[idx] = 0.0f;
-        c_prime[b*nx] = 0.0f;
-        d_prime[b*nx] = 0.0f;
+        c_prime[0] = 0.0f;
+        d_prime[0] = 0.0f;
     } else {
-        float b_val = 2.0f * (1.0f + alpha) - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
-        c_prime[b*nx] = c_val / b_val;
-        d_prime[b*nx] = rhs[idx] / b_val;
+        float b_val = 2.0f * (1.0f + alpha); // - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
+        c_prime[0] = c_val / b_val;
+        d_prime[0] = rhs[idx] / b_val;
     }
 
     for (int j = 1; j < nx; j++) {
         int idx = row_offset + j;
         if (vegetacion[idx] <= 2.0f) {
             I[idx] = 0.0f;
-            c_prime[b*nx + j] = 0.0f;
-            d_prime[b*nx + j] = 0.0f;
+            c_prime[j] = 0.0f;
+            d_prime[j] = 0.0f;
             continue;
         }
-        float b_val = 2.0f * (1.0f + alpha) - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
-        float denom = b_val - a_val * c_prime[b*nx + j - 1];
-        c_prime[b*nx + j] = c_val / denom;
-        d_prime[b*nx + j] = (rhs[row_offset + j] - a_val * d_prime[b*nx + j - 1]) / denom;
+        float b_val = 2.0f * (1.0f + alpha); // - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
+        float denom = b_val - a_val * c_prime[j - 1];
+        c_prime[j] = c_val / denom;
+        d_prime[j] = (rhs[row_offset + j] - a_val * d_prime[j - 1]) / denom;
     }
 
     // backward substitution
@@ -172,7 +172,7 @@ __global__ void solve_tridiagonal_y_global(const float* rhs, float* I, const flo
                                            const int ny, const int nx, const int n_batch,
                                            const float* vegetacion) {
     int j = blockIdx.x * blockDim.x + threadIdx.x; // columna
-    int b = blockIdx.y * blockDim.y + threadIdx.y; // fila
+    int b = blockIdx.z;                           // n_batch
     if (j >= nx || b >= n_batch) return;
     if (j == 0 || j == nx-1) return; // condiciones de frontera
 
@@ -192,7 +192,7 @@ __global__ void solve_tridiagonal_y_global(const float* rhs, float* I, const flo
         c_prime[0] = 0.0f;
         d_prime[0] = 0.0f;
     } else {
-        float b_val = 2.0f * (1.0f + alpha) - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
+        float b_val = 2.0f * (1.0f + alpha); // - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
         c_prime[0] = c_val / b_val;
         d_prime[0] = rhs[idx] / b_val;
     }
@@ -201,21 +201,21 @@ __global__ void solve_tridiagonal_y_global(const float* rhs, float* I, const flo
         int idx = b * nx * ny + k * nx + j;
         if (vegetacion[idx] <= 2.0f) {
             I[idx] = 0.0f;
-            c_prime[b*ny + k] = 0.0f;
-            d_prime[b*ny + k] = 0.0f;
+            c_prime[k] = 0.0f;
+            d_prime[k] = 0.0f;
             continue;
         }
-        float b_val = 2.0f * (1.0f + alpha) - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
-        float denom = b_val - a_val * c_prime[b*ny + k-1];
-        c_prime[b*ny + k] = c_val / denom;
-        d_prime[b*ny + k] = (rhs[idx] - a_val * d_prime[b*ny + k-1]) / denom;
+        float b_val = 2.0f * (1.0f + alpha); // - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
+        float denom = b_val - a_val * c_prime[k-1];
+        c_prime[k] = c_val / denom;
+        d_prime[k] = (rhs[idx] - a_val * d_prime[k-1]) / denom;
     }
 
     // Back substitution
     if (vegetacion[b*nx*ny + (ny-1) * nx + j] <= 2.0f) {
         I[b*nx*ny + (ny-1) * nx + j] = 0.0f;
     } else {
-        I[b*nx*ny + (ny-1) * nx + j] = d_prime[b*ny + (ny-1)];
+        I[b*nx*ny + (ny-1) * nx + j] = d_prime[(ny-1)];
     }
     for (int k = ny-2; k >= 0; k--) {
         int idx = b*nx*ny + k * nx + j;
@@ -281,7 +281,7 @@ __global__ void reaction_advection_kernel_raw(const float* S, const float* I, co
 
     // reaccion y adveccion *explicitos* (sin difusion)
     float S_new_val = S_val - dt * beta_val * I_val * S_val;
-    float I_new_val = I_val - dt / d * (adv_x * I_dx + adv_y * I_dy);
+    float I_new_val = I_val + dt * beta_val * I_val * S_val - dt * gamma_val * I_val - dt / d * (adv_x * I_dx + adv_y * I_dy);
     float R_new_val = R_val + dt * gamma_val * I_val;
 
     S_tmp[idx] = S_new_val;
@@ -312,7 +312,6 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
       3) Reacción + advección explícitas dt/2  -> (S_new, I_new, R_new)
       4) Difusión implícita en X (sobre I_new)
 
-    Corrección clave: antes se asumía orden (ny, nx, n_batch); ahora se usa (n_batch, ny, nx).
     """
     if S.ndim != 3:
         raise ValueError("Se espera S con 3 dimensiones (n_batch, ny, nx)")
