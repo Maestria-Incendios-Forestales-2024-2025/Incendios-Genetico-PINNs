@@ -346,7 +346,7 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
             vegetacion.ravel()
         )
     )
-    
+
     compute_rhs_y_kernel(
         grid_diff_adv, threads_2d,
         (
@@ -423,13 +423,12 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
 
 ############################## CONDICIÓN DE COURANT ###############################################
 
-def courant_batch(dt, D, A, B, d, wx, wy, h_dx, h_dy):
+def courant_batch(dt, A, B, d, wx, wy, h_dx, h_dy):
     """
     Verifica la condición de estabilidad de Courant por batch.
     
     Args:
         dt (float): Intervalo de tiempo.
-        D (cp.ndarray): Array de coeficientes de difusión, shape (n_batch,)
         A (cp.ndarray): Array de coeficientes A, shape (n_batch,)
         B (cp.ndarray): Array de coeficientes B, shape (n_batch,)
         d (float): Tamaño de la celda
@@ -452,6 +451,33 @@ def courant_batch(dt, D, A, B, d, wx, wy, h_dx, h_dy):
     courant_advectivo = d / (cp.sqrt(2) * velocidad_max)
 
     # Retorna booleano por batch
+    return dt < courant_advectivo
+
+def courant(dt, A, B, d, wx, wy, h_dx, h_dy):
+    
+    '''
+    Verifica la condición de estabilidad de Courant para un modelo de difusión y advección.
+    
+    Args:
+      dt (float): Intervalo de tiempo.
+      A (float): Coeficiente relacionado con la velocidad del viento.
+      B (float): Coeficiente relacionado con la pendiente del terreno.
+      d (float): Tamaño de la celda en el mapa.
+      wx (float): Componente x de la velocidad del viento.
+      wy (float): Componente y de la velocidad del viento.
+      h_dx (float): Derivada parcial de la altura del terreno en la dirección x.
+      h_dy (float): Derivada parcial de la altura del terreno en la dirección y.
+    
+    Returns:
+      bool: True si la condición de estabilidad de Courant se cumple, False en caso contrario.
+    '''
+    
+    # Courant para advección
+    velocidad = cp.sqrt((A * wx + B * h_dx)**2 + (A * wy + B * h_dy)**2)
+    courant_advectivo = d / (cp.sqrt(2) * cp.max(velocidad))
+
+    # Retorna un booleano indicando si la condición de estabilidad se cumple
+    #return dt < cp.minimum(courant_difusion, courant_advectivo)
     return dt < courant_advectivo
 
 ############################## SPREAD INFECTION CON RAW KERNEL ###############################################

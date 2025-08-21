@@ -1,5 +1,5 @@
 import cupy as cp  # type: ignore
-import csv, os, sys
+import os, sys
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
 from fitness import aptitud_batch
 from config import d, dt
@@ -21,27 +21,25 @@ h_dy_mapa = datos["h_dy"]
 
 ############################## CHEQUEO DE CONDICIÓN DE COURANT ###############################################
 
-def validate_courant_and_adjust(D, A, B):
+def validate_courant_and_adjust(A, B):
     """Valida la condición de Courant y ajusta parámetros si es necesario."""
     
     iteraciones = 0
-    while not courant(dt, D, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
+    while not courant(dt, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
         iteraciones += 1
         # Alternativa más eficiente: seleccionar aleatoriamente entre 0, 1, 2
-        param_idx = int(cp.random.randint(0, 3))  # 0, 1, o 2
-        
-        if param_idx == 0:  # D
-            D = float(D * float(cp.random.uniform(0.8, 0.99)))
-        elif param_idx == 1:  # A
+        param_idx = int(cp.random.randint(0, 2))  # 0, 1
+
+        if param_idx == 0:  # A
             A = float(A * float(cp.random.uniform(0.8, 0.99)))
-        elif param_idx == 2:  # B
+        elif param_idx == 1:  # B
             B = float(B * float(cp.random.uniform(0.8, 0.99)))
         
         # Evitar bucles infinitos
         if iteraciones > 100:
             print(f"Warning: Validación Courant tomó {iteraciones} iteraciones")
             break
-    return D, A, B
+    return A, B
 
 ############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
 
@@ -100,7 +98,7 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
         parametros_validados = []
         for D, A, B, x, y, betas, gammas in parametros_batch:
             # Validar y ajustar parámetros
-            D, A, B = validate_courant_and_adjust(D, A, B)
+            A, B = validate_courant_and_adjust(A, B)
             x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
             betas, gammas = validate_beta_gamma(betas, gammas)
             parametros_validados.append((D, A, B, x, y, betas, gammas))
@@ -116,9 +114,10 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
                 "betas": betas, "gammas": gammas
             })
             print(
-                f'Individuo {i+j+1}: D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}, '
-                f'beta={[f"{b:.3f}" for b in betas]}, gamma={[f"{g:.3f}" for g in gammas]}, '
-                f'fitness={fitness:.4f}'
+                f'Individuo {i+j+1}: D={D}, A={A}, B={B}, x={x}, y={y}, \n'
+                f'\t beta={betas}, \n'
+                f'\t gamma={gammas}, \n'
+                f'\t fitness={fitness:.4f}'
             )
     
     return resultados
