@@ -9,6 +9,12 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modelo_rdc import spread_infection_adi, spread_infection_explicit_raw
 
+############################## BATCH #########################################################
+
+def create_batch(array_base, n_batch):
+    # Se repite array_base n_batch veces en un bloque contiguo
+    return cp.tile(array_base[cp.newaxis, :, :], (n_batch, 1, 1)).copy()
+
 ############################## CARGADO DE MAPAS ###############################################
 
 datos = preprocesar_datos()
@@ -114,11 +120,11 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     beta_batch, gamma_batch = crear_mapas_parametros_batch(parametros_batch, vegetacion)
 
     # Expandir arrays de parámetros ambientales para el batch
-    wx_batch = cp.broadcast_to(wx, (batch_size, ny, nx))
-    wy_batch = cp.broadcast_to(wy, (batch_size, ny, nx))
-    h_dx_batch = cp.broadcast_to(h_dx_mapa, (batch_size, ny, nx))
-    h_dy_batch = cp.broadcast_to(h_dy_mapa, (batch_size, ny, nx))
-    vegetacion_batch = cp.broadcast_to(vegetacion, (batch_size, ny, nx))
+    wx_batch = create_batch(wx, batch_size)
+    wy_batch = create_batch(wy, batch_size)
+    h_dx_batch = create_batch(h_dx_mapa, batch_size)
+    h_dy_batch = create_batch(h_dy_mapa, batch_size)
+    vegetacion_batch = create_batch(vegetacion, batch_size)
 
     # Crear arrays de parámetros D, A, B para cada simulación
     D_batch = cp.array([param[0] for param in parametros_batch], dtype=cp.float32)
@@ -140,13 +146,6 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
             D=D_batch, wx=wx_batch, wy=wy_batch, 
             h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch, vegetacion=vegetacion_batch
         )
-        # spread_infection_explicit_raw(
-        #     S=S_batch, I=I_batch, R=R_batch, 
-        #     S_new=S_new_batch, I_new=I_new_batch, R_new=R_new_batch,
-        #     dt=dt, d=d, beta=beta_batch, gamma=gamma_batch,
-        #     D=D_batch, wx=wx_batch, wy=wy_batch, 
-        #     h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch, vegetacion=vegetacion_batch
-        # )
 
         # Intercambiar arrays
         S_batch, S_new_batch = S_new_batch, S_batch
@@ -173,18 +172,7 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
         if not cp.any(simulaciones_validas):
             print(f"Todas las simulaciones explotaron en el paso {t+1}")
             break
-            
-        # Verificación cada 100 pasos para detectar tendencias problemáticas
-        # if t % 100 == 0 and t > 0:
-        #     max_R = cp.max(R_batch, axis=(1, 2))
-        #     min_R = cp.min(R_batch, axis=(1, 2))
-        #     sims_problema = (max_R > 1.1) | (min_R < -0.1)
-        #     if cp.any(sims_problema):
-        #         indices_problema = cp.where(sims_problema)[0]
-        #         print(f"Paso {t}: Simulaciones con valores sospechosos: {[int(x) for x in indices_problema]}")
-        #         print(f"  Max R: {[float(max_R[i]) for i in indices_problema]}")
-        #         print(f"  Min R: {[float(min_R[i]) for i in indices_problema]}")
-    
+
     # Calcular fitness para cada simulación en paralelo
     fitness_values = []
     
@@ -201,7 +189,7 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     # Calcular fitness para todo el batch
     burnt_cells_total = cp.sum(burnt_cells)
     fitness_batch = (union_batch - interseccion_batch) / burnt_cells_total
-    
+
     # Calcular celdas quemadas por cada simulación individual
     celdas_quemadas_por_sim = cp.sum(burnt_cells_sim_batch, axis=(1, 2))  # Suma sobre ejes espaciales
     
@@ -211,33 +199,30 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
 
     # Procesar resultados
     for i in range(batch_size):
-        # if not simulaciones_validas[i]:
-        #     fitness_values.append(float('inf'))
-        # else:
         fitness_values.append(float(fitness_batch[i]))
         
         # Información de debug
-        params = parametros_batch[i]
-        D, A, B, x, y = params[0], params[1], params[2], params[3], params[4]
-        celdas_sim_i = int(celdas_quemadas_por_sim[i])
-        paso_exp_i = int(paso_explosion[i])
+        # params = parametros_batch[i]
+        # D, A, B, x, y = params[0], params[1], params[2], params[3], params[4]
+        # celdas_sim_i = int(celdas_quemadas_por_sim[i])
+        # paso_exp_i = int(paso_explosion[i])
         
-        if simulaciones_validas[i]:
-            print(f'Sim {i}: fitness={fitness_batch[i]:.4f}, D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}, betas={params[5]}, gammas={params[6]}')
-            print(f'  Celdas quemadas referencia: {burnt_cells_total}, Simuladas: {celdas_sim_i}')
-        else:
-            print(f'Sim {i}: fitness=inf (explotó en paso {paso_exp_i}), D={D:.4f}, A={A:.4f}, B={B:.4f}, x={x}, y={y}, betas={params[5]}, gammas={params[6]}')
-            print(f'  Celdas simuladas antes de explotar: {celdas_sim_i}')
+        # if simulaciones_validas[i]:
+        #     print(f'Sim {i}: fitness={fitness_batch[i]:.4f}, D={D}, A={A}, B={B}, x={x}, y={y}, betas={params[5]}, gammas={params[6]}')
+        #     print(f'  Celdas quemadas referencia: {burnt_cells_total}, Simuladas: {celdas_sim_i}')
+        # else:
+        #     print(f'Sim {i}: fitness=inf (explotó en paso {paso_exp_i}), D={D}, A={A}, B={B}, x={x}, y={y}, betas={params[5]}, gammas={params[6]}')
+        #     print(f'  Celdas simuladas antes de explotar: {celdas_sim_i}')
     
-    # Resumen de explosiones
-    explosiones = paso_explosion[paso_explosion >= 0]
-    if len(explosiones) > 0:
-        print(f'\nResumen de explosiones:')
-        print(f'  Total simulaciones que explotaron: {len(explosiones)}/{batch_size}')
-        print(f'  Pasos de explosión: {[int(x) for x in explosiones]}')
-        print(f'  Paso promedio de explosión: {float(cp.mean(explosiones)):.1f}')
-        print(f'  Rango de explosiones: {int(cp.min(explosiones))} - {int(cp.max(explosiones))}')
-    else:
-        print(f'\nNo hubo explosiones en este batch ({batch_size} simulaciones completadas)')
+    # # Resumen de explosiones
+    # explosiones = paso_explosion[paso_explosion >= 0]
+    # if len(explosiones) > 0:
+    #     print(f'\nResumen de explosiones:')
+    #     print(f'  Total simulaciones que explotaron: {len(explosiones)}/{batch_size}')
+    #     print(f'  Pasos de explosión: {[int(x) for x in explosiones]}')
+    #     print(f'  Paso promedio de explosión: {float(cp.mean(explosiones)):.1f}')
+    #     print(f'  Rango de explosiones: {int(cp.min(explosiones))} - {int(cp.max(explosiones))}')
+    # else:
+    #     print(f'\nNo hubo explosiones en este batch ({batch_size} simulaciones completadas)')
     
     return fitness_values
