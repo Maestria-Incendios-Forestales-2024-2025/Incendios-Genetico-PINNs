@@ -17,11 +17,10 @@ h_dy_mapa = datos["h_dy"]
 ############################## INCENDIO DE REFERENCIA ####################################################
 
 # ruta_incendio_referencia = 'c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/area_quemada_SM.asc'
-ruta_incendio_referencia = 'c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/R_final.npy'
+ruta_incendio_referencia = 'c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/R_referencia.npy'
 
 ############################## CONDICIÓN DE COURANT PARA LOS TÉRMINOS DIFUSIVOS Y ADVECTIVOS ############
 
-D_max = d**2 / (2*dt) # constante de difusión
 A_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(wx**2+wy**2))) # constante de viento
 B_max = d / (cp.sqrt(2)*dt*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2))) # contstante de pendiente
 
@@ -38,10 +37,10 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 # Ejecutar el GA con procesamiento en batch
-resultados = genetic_algorithm(tamano_poblacion=30, generaciones=1, limite_parametros=limite_parametros,
+resultados = genetic_algorithm(tamano_poblacion=10, generaciones=1, limite_parametros=limite_parametros,
                                ruta_incendio_referencia=ruta_incendio_referencia, 
                                #archivo_preentrenado='Genetico/resultados/task_1811150/resultados_generacion_13.csv', 
-                               num_steps=5000,
+                               num_steps=500,
                                batch_size=10)
 
 # Sincronizar después de completar la ejecución
