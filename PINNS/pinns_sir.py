@@ -16,8 +16,10 @@ sigma_x, sigma_y = 0.05, 0.05
 epochs_adam = 10000
 
 # Parámetros variables (desde línea de comandos)
-D_I = float(sys.argv[1])
-beta_val = float(sys.argv[2])
+# D_I = float(sys.argv[1])
+# beta_val = float(sys.argv[2])
+beta_val = 1.0
+D_I = 0.05
 
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
 
