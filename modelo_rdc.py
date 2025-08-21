@@ -346,7 +346,7 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
             vegetacion.ravel()
         )
     )
-
+    
     compute_rhs_y_kernel(
         grid_diff_adv, threads_2d,
         (
@@ -361,7 +361,7 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
     c_prime_y = cp.zeros((n_batch, nx, ny), dtype=cp.float32)
     d_prime_y = cp.zeros((n_batch, nx, ny), dtype=cp.float32)
     threads_y_solve = (16, 1)
-    grid_y_solve = ((nx + threads_y_solve[0] - 1) // threads_y_solve[0], n_batch)
+    grid_y_solve = ((nx + threads_y_solve[0] - 1) // threads_y_solve[0], 1, n_batch)
 
     solve_tridiagonal_y_global_kernel(
         grid_y_solve, threads_y_solve,
@@ -423,35 +423,35 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
 
 ############################## CONDICIÓN DE COURANT ###############################################
 
-def courant(dt, D, A, B, d, wx, wy, h_dx, h_dy):
-    
-    '''
-    Verifica la condición de estabilidad de Courant para un modelo de difusión y advección.
+def courant_batch(dt, D, A, B, d, wx, wy, h_dx, h_dy):
+    """
+    Verifica la condición de estabilidad de Courant por batch.
     
     Args:
-      dt (float): Intervalo de tiempo.
-      D (float): Coeficiente de difusión.
-      A (float): Coeficiente relacionado con la velocidad del viento.
-      B (float): Coeficiente relacionado con la pendiente del terreno.
-      d (float): Tamaño de la celda en el mapa.
-      wx (float): Componente x de la velocidad del viento.
-      wy (float): Componente y de la velocidad del viento.
-      h_dx (float): Derivada parcial de la altura del terreno en la dirección x.
-      h_dy (float): Derivada parcial de la altura del terreno en la dirección y.
+        dt (float): Intervalo de tiempo.
+        D (cp.ndarray): Array de coeficientes de difusión, shape (n_batch,)
+        A (cp.ndarray): Array de coeficientes A, shape (n_batch,)
+        B (cp.ndarray): Array de coeficientes B, shape (n_batch,)
+        d (float): Tamaño de la celda
+        wx, wy, h_dx, h_dy: arrays de shape (n_batch, ny, nx)
     
     Returns:
-      bool: True si la condición de estabilidad de Courant se cumple, False en caso contrario.
-    '''
-
-    # Courant para difusión
-    #courant_difusion = d**2 / (2 * D)
+        cp.ndarray: Booleano por batch, shape (n_batch,)
+    """
     
-    # Courant para advección
-    velocidad = cp.sqrt((A * wx + B * h_dx)**2 + (A * wy + B * h_dy)**2)
-    courant_advectivo = d / (cp.sqrt(2) * cp.max(velocidad))
+    # Velocidad efectiva por batch y por celda
+    velocidad = cp.sqrt(
+        (A[:, None, None] * wx + B[:, None, None] * h_dx)**2 +
+        (A[:, None, None] * wy + B[:, None, None] * h_dy)**2
+    )
 
-    # Retorna un booleano indicando si la condición de estabilidad se cumple
-    #return dt < cp.minimum(courant_difusion, courant_advectivo)
+    # Max por batch
+    velocidad_max = cp.max(velocidad, axis=(1,2))
+
+    # Condición de Courant advección por batch
+    courant_advectivo = d / (cp.sqrt(2) * velocidad_max)
+
+    # Retorna booleano por batch
     return dt < courant_advectivo
 
 ############################## SPREAD INFECTION CON RAW KERNEL ###############################################
