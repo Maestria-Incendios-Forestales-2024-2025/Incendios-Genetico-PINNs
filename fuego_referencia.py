@@ -1,4 +1,4 @@
-from modelo_rdc import spread_infection_adi, courant
+from modelo_rdc import spread_infection_adi, courant_batch
 import numpy as np 
 import cupy as cp # type: ignore
 import cupyx.scipy.ndimage
@@ -7,6 +7,10 @@ import cupyx.scipy.ndimage
 
 def ensure_batch_dim(*arrays):
     return [arr if arr.ndim == 3 else arr[cp.newaxis, ...] for arr in arrays]
+
+def create_batch(array_base, n_batch):
+    # Se repite array_base n_batch veces en un bloque contiguo
+    return cp.tile(array_base[cp.newaxis, :, :], (n_batch, 1, 1)).copy()
 
 ############################## CARGADO DE MAPAS ###############################################
 
@@ -47,22 +51,27 @@ ny, nx = vegetacion.shape  # Usamos cualquier mapa para obtener las dimensiones
 # Tamaño de cada celda
 d = cp.float32(30) # metros
 # Coeficiente de difusión
-D = cp.float32(10) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
+D_value = cp.float32(55.1571) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
 # Sortear valores aleatorios para beta_params y gamma_params
-cp.random.seed(45)
-beta_params = cp.random.uniform(0.2, 2, size=5)
-gamma_params = cp.random.uniform(0.05, 1, size=5)
+# cp.random.seed(45)
+# beta_params = cp.random.uniform(0.2, 2, size=5)
+# gamma_params = cp.random.uniform(0.05, 1, size=5)
 
-# Asegurar que beta > gamma en cada posición
-for i in range(5):
-    if beta_params[i] <= gamma_params[i]:
-        gamma_params[i] = beta_params[i] - cp.random.uniform(0.05, 0.15)
-        if gamma_params[i] < 0.01:
-            gamma_params[i] = 0.01
+# # Asegurar que beta > gamma en cada posición
+# for i in range(5):
+#     if beta_params[i] <= gamma_params[i]:
+#         gamma_params[i] = beta_params[i] - cp.random.uniform(0.05, 0.15)
+#         if gamma_params[i] < 0.01:
+#             gamma_params[i] = 0.01
 
-beta_params = beta_params.tolist()
-gamma_params = gamma_params.tolist()
+# beta_params = beta_params.tolist()
+# gamma_params = gamma_params.tolist()
+
+# vegetacion = cp.full((ny, nx), 3)
+
+beta_params = [0.5255902409553528, 1.0790209770202637, 1.4601494073867798, 1.9307336807250977, 0.8967558145523071]
+gamma_params = [0.4730312168598175, 0.2628641724586487, 0.3462429940700531, 0.7548003792762756, 0.3884868323802948]
 
 veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
 beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
@@ -102,57 +111,84 @@ wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
 wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
 
 # Constante A adimensional de viento
-A = cp.float32(5e-4) # 10^-3 está al doble del límite de estabilidad
+A_value = cp.float32(0.0002) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
-B = cp.float32(15) # m/h
-
-D = cp.asarray(D, dtype=cp.float32).reshape(1)
-A = cp.asarray(A, dtype=cp.float32).reshape(1)
-B = cp.asarray(B, dtype=cp.float32).reshape(1)
+B_value = cp.float32(3.9802) # m/h
 
 # Cálculo de la pendiente (usando mapas de pendiente y orientación)
 h_dx_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
 h_dy_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
 
-############################## INCENDIO DE REFERENCIA ###############################################
+n_batch = 4
 
-# Población inicial de susceptibles e infectados
-S = cp.ones((ny, nx), dtype=cp.float32)  # Todos son susceptibles inicialmente
-I = cp.zeros((ny, nx), dtype=cp.float32) # Ningún infectado al principio
-R = cp.zeros((ny, nx), dtype=cp.float32)
+tiempos_calculo = []
 
-S = cp.where(vegetacion <= 2, 0, S)  # Celdas no vegetadas son susceptibles
+for n_batch in [1, 2, 3, 4, 5, 10, 20]:
+    print(f'Calculando para n_batch {n_batch}')
+    D = cp.full((n_batch), D_value, dtype=cp.float32)
+    A = cp.full((n_batch), A_value, dtype=cp.float32)
+    B = cp.full((n_batch), B_value, dtype=cp.float32)
 
-print(f'Se cumple la condición de Courant para el término advectivo: {courant(dt/2, D, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
+    ############################## INCENDIO DE REFERENCIA ###############################################
 
-# Coordenadas del punto de ignición
-x_ignicion = 400
-y_ignicion = 600
+    # Población inicial de susceptibles e infectados
+    S_batch = cp.ones((n_batch, ny, nx), dtype=cp.float32)
+    I_batch = cp.zeros_like(S_batch)
+    R_batch = cp.zeros_like(S_batch)
 
-if vegetacion[y_ignicion, x_ignicion] > 2:
-    # Infectados en una esquina de la grilla
-    S[y_ignicion, x_ignicion] = 0
-    I[y_ignicion, x_ignicion] = 1
+    S_batch = cp.where(vegetacion <= 2, 0, S_batch)  # Celdas no vegetadas son susceptibles
 
-    var_poblacion = 0
+    # print(f'Se cumple la condición de Courant para el término advectivo: {courant_batch(dt/2, D, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
 
-    # Inicializar arrays de cupy para almacenar los resultados
-    num_steps = 500
-    pob_total = cp.zeros(num_steps)
-    S_total = cp.zeros(num_steps)
-    I_total = cp.zeros(num_steps)
-    R_total = cp.zeros(num_steps)
+    # Coordenadas del punto de ignición
+    x_ignicion = 487
+    y_ignicion = 528
 
-    # Definir arrays de estado
-    S_new = cp.empty_like(S)
-    I_new = cp.empty_like(I)
-    R_new = cp.empty_like(R)
+    # if vegetacion[y_ignicion, x_ignicion] > 2:
+        # Infectados en una esquina de la grilla
+    S_batch[:, y_ignicion, x_ignicion] = 0
+    I_batch[:, y_ignicion, x_ignicion] = 1
 
-    celdas_rotas = 0
+        # var_poblacion = 0
 
-    S, I, R, S_new, I_new, R_new, beta_veg, gamma, wx, wy, h_dx_mapa, h_dy_mapa = ensure_batch_dim(
-    S, I, R, S_new, I_new, R_new, beta_veg, gamma, wx, wy, h_dx_mapa, h_dy_mapa)
+        # Inicializar arrays de cupy para almacenar los resultados
+    num_steps = 1000
+        # pob_total = cp.zeros(num_steps)
+        # S_total = cp.zeros(num_steps)
+        # I_total = cp.zeros(num_steps)
+        # R_total = cp.zeros(num_steps)
+
+        # Definir arrays de estado
+    S_new_batch = cp.empty_like(S_batch)
+    I_new_batch = cp.empty_like(I_batch)
+    R_new_batch = cp.empty_like(R_batch)
+
+        # celdas_rotas = cp.zeros(S.shape[0], dtype=cp.int32)
+
+    beta_veg_batch = create_batch(beta_veg, n_batch)
+    gamma_batch = create_batch(gamma, n_batch)
+
+    wx_batch = create_batch(wx, n_batch)
+    wy_batch = create_batch(wy, n_batch)
+
+    h_dx_mapa_batch = create_batch(h_dx_mapa, n_batch)
+    h_dy_mapa_batch = create_batch(h_dy_mapa, n_batch)
+    vegetacion_batch = create_batch(vegetacion, n_batch)
+
+        # print(f'El array es contiguo: {vegetacion.flags.c_contiguous}')
+
+        # Sumas por batch
+        # suma_S = S.sum(axis=(1,2)) / (nx*ny)  # array de tamaño n_batch
+        # suma_I = I.sum(axis=(1,2)) / (nx*ny)
+        # suma_R = R.sum(axis=(1,2)) / (nx*ny)
+        # suma_total = suma_S + suma_I + suma_R
+
+        # for b in range(S.shape[0]):
+        #     print(f"batch {b}: Total = {suma_total[b]:.3f}, S = {suma_S[b]:.3f}, I = {suma_I[b]:.3f}, R = {suma_R[b]:.3f}")
+        #     print(f'  S: min={S[b].min():.3f}, max={S[b].max():.3f}')
+        #     print(f'  I: min={I[b].min():.3f}, max={I[b].max():.3f}')
+        #     print(f'  R: min={R[b].min():.3f}, max={R[b].max():.3f}')
 
     start = cp.cuda.Event()
     end = cp.cuda.Event()
@@ -161,61 +197,59 @@ if vegetacion[y_ignicion, x_ignicion] > 2:
 
     # Iterar sobre las simulaciones
     for t in range(num_steps):
-        spread_infection_adi(S, I, R, S_new, I_new, R_new, dt, d, beta_veg, gamma, D, wx, wy, h_dx_mapa, h_dy_mapa, A, B, vegetacion)
+        spread_infection_adi(S_batch, I_batch, R_batch, S_new_batch, I_new_batch, R_new_batch, dt, d, beta_veg_batch, gamma_batch, D, wx_batch, wy_batch, h_dx_mapa_batch, h_dy_mapa_batch, A, B, vegetacion_batch)
 
         # Swap de buffers (intercambiar referencias en lugar de crear nuevos arrays)
-        S, S_new = S_new, S
-        I, I_new = I_new, I
-        R, R_new = R_new, R
+        S_batch, S_new_batch = S_new_batch, S_batch
+        I_batch, I_new_batch = I_new_batch, I_batch
+        R_batch, R_new_batch = R_new_batch, R_batch
 
-        if not cp.all((S <= 1) & (S >= 0)):
-            celdas_rotas += cp.sum((S < 0) | (S > 1))
+            # # Revisar por batch
+            # for b in range(S.shape[0]):
+            #     if not cp.all((S[b] <= 1) & (S[b] >= 0)):
+            #         celdas_rotas[b] += cp.sum((S[b] < 0) | (S[b] > 1))
+            #     if not cp.all((I[b] <= 1) & (I[b] >= 0)):
+            #         celdas_rotas[b] += cp.sum((I[b] < 0) | (I[b] > 1))
+            #     if not cp.all((R[b] <= 1) & (R[b] >= 0)):
+            #         celdas_rotas[b] += cp.sum((R[b] < 0) | (R[b] > 1))
 
-        if not cp.all((I <= 1) & (I >= 0)):
-            celdas_rotas += cp.sum((I < 0) | (I > 1))
+            # # Sumas por batch
+            # suma_S = S.sum(axis=(1,2)) / (nx*ny)  # array de tamaño n_batch
+            # suma_I = I.sum(axis=(1,2)) / (nx*ny)
+            # suma_R = R.sum(axis=(1,2)) / (nx*ny)
+            # suma_total = suma_S + suma_I + suma_R
 
-        if not cp.all((R <= 1) & (R >= 0)):
-            celdas_rotas += cp.sum((R < 0) | (R > 1))
+            # pob_total[t] = suma_total.mean()  # promedio sobre batches
+            # S_total[t] = suma_S.mean()
+            # I_total[t] = suma_I.mean()
+            # R_total[t] = suma_R.mean()
 
-        suma_S = S.sum() / (nx*ny)
-        suma_I = I.sum() / (nx*ny)
-        suma_R = R.sum() / (nx*ny)
+            # if (t % 100 == 0) or (t == num_steps - 1):
+            #     for b in range(S.shape[0]):
+            #         print(f"Paso {t}, batch {b}: Total = {suma_total[b]:.3f}, S = {suma_S[b]:.3f}, I = {suma_I[b]:.3f}, R = {suma_R[b]:.3f}")
+            #         print(f'  S: min={S[b].min():.3f}, max={S[b].max():.3f}')
+            #         print(f'  I: min={I[b].min():.3f}, max={I[b].max():.3f}')
+            #         print(f'  R: min={R[b].min():.3f}, max={R[b].max():.3f}')
 
-        suma_total = suma_S + suma_I + suma_R
-        pob_total[t] = suma_total
-        S_total[t] = suma_S
-        I_total[t] = suma_I
-        R_total[t] = suma_R
-
-        if (t % 100 == 0) or (t == num_steps - 1):
-            print(f"Paso {t}: Población total = {suma_total}, Susceptibles = {suma_S}, Infectados = {suma_I}, Recuperados = {suma_R}")
-            print(f'Valor máximo de S: {S.max()}')
-            print(f'Valor mínimo de S: {S.min()}')
-            print(f'Valor máximo de I: {I.max()}')
-            print(f'Valor mínimo de I: {I.min()}')
-            print(f'Valor máximo de R: {R.max()}')
-            print(f'Valor mínimo de R: {R.min()}')
-
-            mask = (cp.squeeze(vegetacion) == 1)
-            R_squeeze = cp.squeeze(R)
-            print(f'Valor máximo de R en no combustibles: {R_squeeze[mask].max()}')
-
-        var_poblacion += cp.abs(suma_total - pob_total[t-1]) if t > 0 else 0
+            # var_poblacion += cp.abs(pob_total[t] - pob_total[t-1]) if t > 0 else 0
 
     end.record()  # Marca el final en GPU
     end.synchronize() # Sincroniza y mide el tiempo
 
-    np.save("R_final.npy", cp.asnumpy(R_new))
+    cp.save("R_final.npy", R_new_batch)
 
     gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
     print(f"Tiempo en GPU: {gpu_time:.3f} ms")
 
-    var_poblacion_promedio = var_poblacion / num_steps
+        # var_poblacion_promedio = var_poblacion / num_steps
 
-    print(f'Variación de población promedio: {var_poblacion_promedio}')
-    print(f'Número de celdas rotas: {celdas_rotas}')
-    print(f'Numero de celdas quemadas: {cp.sum(R > 0.001)}')
+        # print(f'Variación de población promedio: {var_poblacion_promedio}')
+        # print(f'Número de celdas rotas: {celdas_rotas}')
+        # print(f'Numero de celdas quemadas: {cp.sum(R > 0.001)}')
 
+    tiempos_calculo.append(gpu_time)
 
-else:
-    print("El punto de ignición corresponde a una celda no combustible.")
+    # else:
+    #     print("El punto de ignición corresponde a una celda no combustible.")
+
+print(f'Tiempos de cálculo por batch: {tiempos_calculo}')
