@@ -15,19 +15,33 @@ domain_size = 2
 
 # Definir la red neuronal PINN
 class FireSpread_PINN(nn.Module):
-    def __init__(self, layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3]):
+    def __init__(self, d=3, m=50, layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3]):
         super().__init__()
-        self.layers = nn.ModuleList()
-        for i in range(len(layers) - 1):
-            self.layers.append(nn.Linear(layers[i], layers[i+1]))
+
+        # d = dimensión de entrada original (x,y,t)
+        # m = número de frecuencias para el embedding
+
+        # matriz B ~ N(0, sigma^2)
+        self.B = nn.Parameter(torch.randn(m, d) * 10.0, requires_grad = False)
+
+        # arquitectura de la red (entrada = 2m, por sin/cos)
+        input_dim = 2 * m
+        full_layers = [input_dim] + layers
+        self.layers = nn.ModuleList(
+            [nn.Linear(full_layers[i], full_layers[i+1]) for i in range(len(full_layers)-1)]
+        )
         self.activation = nn.Tanh()
 
+    def fourier_features(self, x):
+        # x: (batch_size, d)
+        # Bx -> (batch_size, m)
+        proj = 2 * torch.pi * x @ self.B.T
+        return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
+
     def forward(self, x, y, t):
-        inputs = torch.cat((x, y, t), dim=1)
-        x_scaled = 2 * (inputs[:, 0:1] / domain_size) - 1
-        y_scaled = 2 * (inputs[:, 1:2] / domain_size) - 1
-        t_scaled = 2 * (inputs[:, 2:3] / temporal_domain) - 1
-        out = torch.cat([x_scaled, y_scaled, t_scaled], dim=1)
+        inputs = torch.cat((x, y, t), dim=1) # (batch, 3)
+        ff = self.fourier_features(inputs) # (batch, 2m)
+        out = ff
         for layer in self.layers[:-1]:
             out = self.activation(layer(out))
         return self.layers[-1](out)
