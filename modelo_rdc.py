@@ -5,8 +5,7 @@ import cupy as cp # type: ignore
 kernel_code_adi = r'''
 extern "C" {
 
-__global__ void compute_rhs_y(const float* I, const float* S, float* rhs,
-                              const float* beta, const float* gamma, 
+__global__ void compute_rhs_y(const float* I, float* rhs,
                               const float* D, const float dt, const float d,
                               const int ny, const int nx, const int n_batch,
                               const float* vegetacion) {
@@ -17,10 +16,11 @@ __global__ void compute_rhs_y(const float* I, const float* S, float* rhs,
 
     if (i >= ny || j >= nx || b >= n_batch) return;
 
-    int idx = b * nx * ny + i * nx + j;
+    int idx2d = i * nx + j;
+    int idx = b * nx * ny + idx2d;
 
     // No computar celdas sin combustible
-    if (vegetacion[idx] <= 2.0f) {
+    if (vegetacion[idx2d] <= 2.0f) {
         rhs[idx] = 0.0f;
         return;
     }
@@ -39,20 +39,13 @@ __global__ void compute_rhs_y(const float* I, const float* S, float* rhs,
     float I_top = I[b*ny*nx + i_top * nx + j];
     float I_bottom = I[b*ny*nx + i_bottom * nx + j];
 
-    // float S_idx = S[idx];
-    // float beta_idx = beta[idx];
-    // float gamma_idx = gamma[idx];
-
     float alpha = D[b] * dt / (d * d);
 
-    // float rhs_reaction = dt * I_idx * (beta_idx * S_idx - gamma_idx);
-
     // RHS para paso ADI en y: I + alpha/2 * Laplace_y(I)
-    rhs[idx] = 2.0f * I_idx + alpha * (I_top - 2.0f * I_idx + I_bottom); // + rhs_reaction;
+    rhs[idx] = 2.0f * I_idx + alpha * (I_top - 2.0f * I_idx + I_bottom);
 }
 
-__global__ void compute_rhs_x(const float* I, const float* S, float* rhs,
-                              const float* beta, const float* gamma,
+__global__ void compute_rhs_x(const float* I, float* rhs,
                               const float* D, const float dt, const float d,
                               const int ny, const int nx, const int n_batch,
                               const float* vegetacion) {
@@ -63,10 +56,11 @@ __global__ void compute_rhs_x(const float* I, const float* S, float* rhs,
 
     if (i >= ny || j >= nx || b >= n_batch) return;
 
-    int idx = b * nx * ny + i * nx + j;
+    int idx2d = i * nx + j;
+    int idx = b * nx * ny + idx2d;
 
     // No computar celdas sin combustible
-    if (vegetacion[idx] <= 2.0f) {
+    if (vegetacion[idx2d] <= 2.0f) {
         rhs[idx] = 0.0f;
         return;
     }
@@ -85,22 +79,15 @@ __global__ void compute_rhs_x(const float* I, const float* S, float* rhs,
     float I_left = I[b*ny*nx + i * nx + j_left];
     float I_right = I[b*ny*nx + i * nx + j_right];
 
-    // float S_idx = S[idx];
-    // float beta_idx = beta[idx];
-    // float gamma_idx = gamma[idx];
-
     float alpha = D[b] * dt / (d * d);
 
-    // float rhs_reaction = dt * I_idx * (beta_idx * S_idx - gamma_idx);
-
     // RHS para paso ADI en x: I + alpha/2 * Laplace_x(I)
-    rhs[idx] = 2.0f * I_idx + alpha * (I_right - 2.0f * I_idx + I_left); // + rhs_reaction;
+    rhs[idx] = 2.0f * I_idx + alpha * (I_right - 2.0f * I_idx + I_left);
 }
 
 // Solver tridiagonal usando memoria global (para dominios grandes)
-__global__ void solve_tridiagonal_x_global(const float* rhs, float* I, const float* S, 
+__global__ void solve_tridiagonal_x_global(const float* rhs, float* I, 
                                            float* c_prime_global, float* d_prime_global,
-                                           const float* beta, const float* gamma,
                                            const float* D, const float dt, const float d,
                                            const int ny, const int nx, const int n_batch,
                                            const float* vegetacion) {
@@ -112,7 +99,8 @@ __global__ void solve_tridiagonal_x_global(const float* rhs, float* I, const flo
     if (i == 0 || i == ny-1) return; // condiciones de frontera
 
     // punteros base para fila i
-    int row_offset = b*ny*nx + i * nx;
+    int row_offset2d = i * nx;
+    int row_offset = b*ny*nx + row_offset2d;
 
     float alpha = D[b] * dt / (d * d);
     float a_val = -alpha;        // diagonal inferior
@@ -125,39 +113,42 @@ __global__ void solve_tridiagonal_x_global(const float* rhs, float* I, const flo
     // forward sweep
     int j = 0;
     int idx = row_offset + j;
-    if (vegetacion[idx] <= 2.0f) {
+    int idx2d = row_offset2d + j;
+    if (vegetacion[idx2d] <= 2.0f) {
         I[idx] = 0.0f;
         c_prime[0] = 0.0f;
         d_prime[0] = 0.0f;
     } else {
-        float b_val = 2.0f * (1.0f + alpha); // - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
+        float b_val = 2.0f * (1.0f + alpha); // diagonal principal
         c_prime[0] = c_val / b_val;
         d_prime[0] = rhs[idx] / b_val;
     }
 
     for (int j = 1; j < nx; j++) {
+        int idx2d = row_offset2d + j;
         int idx = row_offset + j;
-        if (vegetacion[idx] <= 2.0f) {
+        if (vegetacion[idx2d] <= 2.0f) {
             I[idx] = 0.0f;
             c_prime[j] = 0.0f;
             d_prime[j] = 0.0f;
             continue;
         }
-        float b_val = 2.0f * (1.0f + alpha); // - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
+        float b_val = 2.0f * (1.0f + alpha); // diagonal principal
         float denom = b_val - a_val * c_prime[j - 1];
         c_prime[j] = c_val / denom;
         d_prime[j] = (rhs[row_offset + j] - a_val * d_prime[j - 1]) / denom;
     }
 
     // backward substitution
-    if (vegetacion[row_offset + nx - 1] <= 2.0f) {
+    if (vegetacion[row_offset2d + nx - 1] <= 2.0f) {
         I[row_offset + nx - 1] = 0.0f;
     } else {
         I[row_offset + nx - 1] = d_prime[nx - 1];
     }
     for (int j = nx - 2; j >= 0; j--) {
+        int idx2d = row_offset2d + j;
         int idx = row_offset + j;
-        if (vegetacion[idx] <= 2.0f) {
+        if (vegetacion[idx2d] <= 2.0f) {
             I[idx] = 0.0f;
             continue;
         }
@@ -165,9 +156,8 @@ __global__ void solve_tridiagonal_x_global(const float* rhs, float* I, const flo
     }
 }
 
-__global__ void solve_tridiagonal_y_global(const float* rhs, float* I, const float* S,
+__global__ void solve_tridiagonal_y_global(const float* rhs, float* I,
                                            float* c_prime_global, float* d_prime_global,
-                                           const float* beta, const float* gamma,
                                            const float* D, const float dt, const float d,
                                            const int ny, const int nx, const int n_batch,
                                            const float* vegetacion) {
@@ -186,40 +176,43 @@ __global__ void solve_tridiagonal_y_global(const float* rhs, float* I, const flo
 
     // Forward sweep
     int k = 0;
-    int idx = b * nx * ny + k * nx + j;
-    if (vegetacion[idx] <= 2.0f) {
+    int idx2d = k * nx + j;
+    int idx = b * nx * ny + idx2d;
+    if (vegetacion[idx2d] <= 2.0f) {
         I[idx] = 0.0f;
         c_prime[0] = 0.0f;
         d_prime[0] = 0.0f;
     } else {
-        float b_val = 2.0f * (1.0f + alpha); // - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
+        float b_val = 2.0f * (1.0f + alpha); // diagonal principal
         c_prime[0] = c_val / b_val;
         d_prime[0] = rhs[idx] / b_val;
     }
 
     for (int k = 1; k < ny; k++) {
-        int idx = b * nx * ny + k * nx + j;
-        if (vegetacion[idx] <= 2.0f) {
+        int idx2d = k * nx + j;
+        int idx = b * nx * ny + idx2d;
+        if (vegetacion[idx2d] <= 2.0f) {
             I[idx] = 0.0f;
             c_prime[k] = 0.0f;
             d_prime[k] = 0.0f;
             continue;
         }
-        float b_val = 2.0f * (1.0f + alpha); // - dt * beta[idx] * S[idx] + dt * gamma[idx]; // diagonal principal
+        float b_val = 2.0f * (1.0f + alpha); // diagonal principal
         float denom = b_val - a_val * c_prime[k-1];
         c_prime[k] = c_val / denom;
         d_prime[k] = (rhs[idx] - a_val * d_prime[k-1]) / denom;
     }
 
     // Back substitution
-    if (vegetacion[b*nx*ny + (ny-1) * nx + j] <= 2.0f) {
+    if (vegetacion[(ny-1) * nx + j] <= 2.0f) {
         I[b*nx*ny + (ny-1) * nx + j] = 0.0f;
     } else {
         I[b*nx*ny + (ny-1) * nx + j] = d_prime[(ny-1)];
     }
     for (int k = ny-2; k >= 0; k--) {
-        int idx = b*nx*ny + k * nx + j;
-        if (vegetacion[idx] <= 2.0f) {
+        int idx2d = k * nx + j;
+        int idx = b*nx*ny + idx2d;
+        if (vegetacion[idx2d] <= 2.0f) {
             I[idx] = 0.0f;
             continue;
         }
@@ -244,10 +237,11 @@ __global__ void reaction_advection_kernel_raw(const float* S, const float* I, co
 
     if (i >= ny || j >= nx || b >= n_batch) return;
 
-    int idx = b * ny * nx + i * nx + j;
+    int idx2d = i * nx + j;
+    int idx = b * ny * nx + idx2d;
 
     // No computar celdas sin combustible
-    if (vegetacion[idx] <= 2.0f) {
+    if (vegetacion[idx2d] <= 2.0f) {
         S_tmp[idx] = 0.0f;
         I_tmp[idx] = 0.0f;
         R_tmp[idx] = 0.0f;
@@ -268,8 +262,8 @@ __global__ void reaction_advection_kernel_raw(const float* S, const float* I, co
     float beta_val = beta[idx];
     float gamma_val = gamma[idx];
 
-    float adv_x = A[b] * wx[idx] + B[b] * h_dx[idx];
-    float adv_y = A[b] * wy[idx] + B[b] * h_dy[idx];
+    float adv_x = A[b] * wx[idx2d] + B[b] * h_dx[idx2d];
+    float adv_y = A[b] * wy[idx2d] + B[b] * h_dy[idx2d];
 
     float I_top    = I[b*ny*nx + (i+1)*nx + j];
     float I_bottom = I[b*ny*nx + (i-1)*nx + j];
@@ -350,8 +344,7 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
     compute_rhs_y_kernel(
         grid_diff_adv, threads_2d,
         (
-            I_star.ravel(), S.ravel(), rhs_y.ravel(),
-            beta.ravel(), gamma.ravel(),
+            I_star.ravel(), rhs_y.ravel(),
             D.ravel(), cp.float32(dt), cp.float32(d),
             cp.int32(ny), cp.int32(nx), cp.int32(n_batch),
             vegetacion.ravel()
@@ -366,9 +359,8 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
     solve_tridiagonal_y_global_kernel(
         grid_y_solve, threads_y_solve,
         (
-            rhs_y.ravel(), I_star.ravel(), S_half.ravel(),
+            rhs_y.ravel(), I_star.ravel(), 
             c_prime_y.ravel(), d_prime_y.ravel(),
-            beta.ravel(), gamma.ravel(),
             D.ravel(), cp.float32(dt), cp.float32(d),
             cp.int32(ny), cp.int32(nx), cp.int32(n_batch),
             vegetacion.ravel()
@@ -394,8 +386,7 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
     compute_rhs_x_kernel(
         grid_diff_adv, threads_2d,
         (
-            I_new.ravel(), S_half.ravel(), rhs_x.ravel(),
-            beta.ravel(), gamma.ravel(),
+            I_new.ravel(), rhs_x.ravel(),
             D.ravel(), cp.float32(dt), cp.float32(d),
             cp.int32(ny), cp.int32(nx), cp.int32(n_batch),
             vegetacion.ravel()
@@ -410,9 +401,8 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
     solve_tridiagonal_x_global_kernel(
         grid_x_solve, threads_x_solve,
         (
-            rhs_x.ravel(), I_new.ravel(), S_new.ravel(),
+            rhs_x.ravel(), I_new.ravel(), 
             c_prime_x.ravel(), d_prime_x.ravel(),
-            beta.ravel(), gamma.ravel(),
             D.ravel(), cp.float32(dt), cp.float32(d),
             cp.int32(ny), cp.int32(nx), cp.int32(n_batch),
             vegetacion.ravel()

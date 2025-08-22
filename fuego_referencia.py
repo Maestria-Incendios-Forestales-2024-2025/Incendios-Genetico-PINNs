@@ -115,7 +115,7 @@ B_value = cp.float32(15) # m/h
 h_dx_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
 h_dy_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
 
-n_batch = 1
+n_batch = 2
 
 D = cp.full((n_batch), D_value, dtype=cp.float32)
 A = cp.full((n_batch), A_value, dtype=cp.float32)
@@ -158,13 +158,6 @@ R_new_batch = cp.empty_like(R_batch)
 beta_veg_batch = create_batch(beta_veg, n_batch)
 gamma_batch = create_batch(gamma, n_batch)
 
-wx_batch = create_batch(wx, n_batch)
-wy_batch = create_batch(wy, n_batch)
-
-h_dx_mapa_batch = create_batch(h_dx_mapa, n_batch)
-h_dy_mapa_batch = create_batch(h_dy_mapa, n_batch)
-vegetacion_batch = create_batch(vegetacion, n_batch)
-
 # print(f'El array es contiguo: {vegetacion.flags.c_contiguous}')
 
 # Sumas por batch
@@ -186,7 +179,7 @@ start.record()
 
 # Iterar sobre las simulaciones
 for t in range(num_steps):
-    spread_infection_adi(S_batch, I_batch, R_batch, S_new_batch, I_new_batch, R_new_batch, dt, d, beta_veg_batch, gamma_batch, D, wx_batch, wy_batch, h_dx_mapa_batch, h_dy_mapa_batch, A, B, vegetacion_batch)
+    spread_infection_adi(S_batch, I_batch, R_batch, S_new_batch, I_new_batch, R_new_batch, dt, d, beta_veg_batch, gamma_batch, D, wx, wy, h_dx_mapa, h_dy_mapa, A, B, vegetacion)
 
     # Swap de buffers (intercambiar referencias en lugar de crear nuevos arrays)
     S_batch, S_new_batch = S_new_batch, S_batch
@@ -225,7 +218,7 @@ for t in range(num_steps):
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-cp.save("R_referencia.npy", R_new_batch)
+cp.save("R_final.npy", R_new_batch)
 
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")

@@ -7,7 +7,7 @@ import os
 
 # Agrega el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from modelo_rdc import spread_infection_adi, spread_infection_explicit_raw
+from modelo_rdc import spread_infection_adi
 
 ############################## BATCH #########################################################
 
@@ -119,13 +119,6 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     # Crear mapas de parámetros de vegetación personalizados
     beta_batch, gamma_batch = crear_mapas_parametros_batch(parametros_batch, vegetacion)
 
-    # Expandir arrays de parámetros ambientales para el batch
-    wx_batch = create_batch(wx, batch_size)
-    wy_batch = create_batch(wy, batch_size)
-    h_dx_batch = create_batch(h_dx_mapa, batch_size)
-    h_dy_batch = create_batch(h_dy_mapa, batch_size)
-    vegetacion_batch = create_batch(vegetacion, batch_size)
-
     # Crear arrays de parámetros D, A, B para cada simulación
     D_batch = cp.array([param[0] for param in parametros_batch], dtype=cp.float32)
     A_batch = cp.array([param[1] for param in parametros_batch], dtype=cp.float32)
@@ -143,8 +136,8 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
             S=S_batch, I=I_batch, R=R_batch, 
             S_new=S_new_batch, I_new=I_new_batch, R_new=R_new_batch,
             dt=dt, d=d, beta=beta_batch, gamma=gamma_batch,
-            D=D_batch, wx=wx_batch, wy=wy_batch, 
-            h_dx=h_dx_batch, h_dy=h_dy_batch, A=A_batch, B=B_batch, vegetacion=vegetacion_batch
+            D=D_batch, wx=wx, wy=wy, 
+            h_dx=h_dx_mapa, h_dy=h_dy_mapa, A=A_batch, B=B_batch, vegetacion=vegetacion
         )
 
         # Intercambiar arrays
