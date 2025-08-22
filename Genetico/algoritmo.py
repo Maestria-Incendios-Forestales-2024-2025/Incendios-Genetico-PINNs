@@ -27,7 +27,7 @@ def validate_courant_and_adjust(A, B):
     iteraciones = 0
     while not courant(dt, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
         iteraciones += 1
-        # Alternativa más eficiente: seleccionar aleatoriamente entre 0, 1, 2
+        # Alternativa más eficiente: seleccionar aleatoriamente entre 0, 1
         param_idx = int(cp.random.randint(0, 2))  # 0, 1
 
         if param_idx == 0:  # A
@@ -44,7 +44,7 @@ def validate_courant_and_adjust(A, B):
 ############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
 
 def validate_ignition_point(x, y, incendio_referencia, limite_parametros):
-    """Valida que el punto de ignición tenga combustible."""
+    """Valida que el punto de ignición tenga combustible o que esté en el incendio de referencia."""
     lim_x, lim_y = limite_parametros[3], limite_parametros[4]
     while vegetacion[int(y), int(x)] <= 2 or incendio_referencia[int(y), int(x)] <= 0.001:
         x, y = float(cp.random.randint(lim_x[0], lim_x[1])), float(cp.random.randint(lim_y[0], lim_y[1]))
@@ -54,8 +54,6 @@ def validate_ignition_point(x, y, incendio_referencia, limite_parametros):
 
 def validate_beta_gamma(betas, gammas):
     """Valida los parámetros beta y gamma. Beta[i] > Gamma[i] para todo i"""
-    betas = cp.array(betas, dtype=cp.float32)
-    gammas = cp.array(gammas, dtype=cp.float32)
     mask = gammas >= betas
     gammas[mask] = 0.9 * betas[mask]
     return betas, gammas
