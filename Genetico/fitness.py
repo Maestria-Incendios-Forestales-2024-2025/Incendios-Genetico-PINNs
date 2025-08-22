@@ -190,39 +190,8 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     burnt_cells_total = cp.sum(burnt_cells)
     fitness_batch = (union_batch - interseccion_batch) / burnt_cells_total
 
-    # Calcular celdas quemadas por cada simulación individual
-    celdas_quemadas_por_sim = cp.sum(burnt_cells_sim_batch, axis=(1, 2))  # Suma sobre ejes espaciales
-    
-    print(f'Celdas quemadas por simulación: {[int(x) for x in celdas_quemadas_por_sim]}')
-    print(f'Celdas quemadas total (todas sims): {int(cp.sum(burnt_cells_sim_batch))}')
-    print(f'Fitness batch: {[float(f) for f in fitness_batch]}')
-
     # Procesar resultados
     for i in range(batch_size):
         fitness_values.append(float(fitness_batch[i]))
-        
-        # Información de debug
-        # params = parametros_batch[i]
-        # D, A, B, x, y = params[0], params[1], params[2], params[3], params[4]
-        # celdas_sim_i = int(celdas_quemadas_por_sim[i])
-        # paso_exp_i = int(paso_explosion[i])
-        
-        # if simulaciones_validas[i]:
-        #     print(f'Sim {i}: fitness={fitness_batch[i]:.4f}, D={D}, A={A}, B={B}, x={x}, y={y}, betas={params[5]}, gammas={params[6]}')
-        #     print(f'  Celdas quemadas referencia: {burnt_cells_total}, Simuladas: {celdas_sim_i}')
-        # else:
-        #     print(f'Sim {i}: fitness=inf (explotó en paso {paso_exp_i}), D={D}, A={A}, B={B}, x={x}, y={y}, betas={params[5]}, gammas={params[6]}')
-        #     print(f'  Celdas simuladas antes de explotar: {celdas_sim_i}')
-    
-    # # Resumen de explosiones
-    # explosiones = paso_explosion[paso_explosion >= 0]
-    # if len(explosiones) > 0:
-    #     print(f'\nResumen de explosiones:')
-    #     print(f'  Total simulaciones que explotaron: {len(explosiones)}/{batch_size}')
-    #     print(f'  Pasos de explosión: {[int(x) for x in explosiones]}')
-    #     print(f'  Paso promedio de explosión: {float(cp.mean(explosiones)):.1f}')
-    #     print(f'  Rango de explosiones: {int(cp.min(explosiones))} - {int(cp.max(explosiones))}')
-    # else:
-    #     print(f'\nNo hubo explosiones en este batch ({batch_size} simulaciones completadas)')
-    
+
     return fitness_values
