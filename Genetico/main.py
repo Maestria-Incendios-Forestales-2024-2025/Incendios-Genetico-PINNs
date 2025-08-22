@@ -5,6 +5,9 @@ from lectura_datos import preprocesar_datos
 from algoritmo import genetic_algorithm
 
 print(cp.cuda.runtime.getDeviceProperties(0)['name'])
+print(cp.__version__)
+print("CUDA runtime:", cp.cuda.runtime.runtimeGetVersion())
+print("CUDA driver :", cp.cuda.runtime.driverGetVersion())
 
 ############################## CARGADO DE MAPAS #######################################################
 
