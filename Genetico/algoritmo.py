@@ -91,8 +91,6 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
             gammas = individuo[10:15]  # gamma
             
             D, A, B, x, y = D.item(), A.item(), B.item(), int(x.item()), int(y.item())
-            betas = betas.tolist()
-            gammas = gammas.tolist()
 
             parametros_batch.append((D, A, B, x, y, betas, gammas))
 
@@ -115,12 +113,6 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
                 "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness,
                 "betas": betas, "gammas": gammas
             })
-            print(
-                f'Individuo {i+j+1}: D={D}, A={A}, B={B}, x={x}, y={y}, \n'
-                f'\t beta={betas}, \n'
-                f'\t gamma={gammas}, \n'
-                f'\t fitness={fitness:.4f}'
-            )
     
     return resultados
 
@@ -144,6 +136,14 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, num_steps=num_steps, batch_size=batch_size)
 
     mutation_rate = 0.3
+
+    for i, individuo in enumerate(resultados, 1):
+            print(
+                f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
+                f'\t beta={individuo["betas"]}, \n'
+                f'\t gamma={individuo["gammas"]}, \n'
+                f'\t fitness={individuo["fitness"]:.4f}'
+            )
 
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 
@@ -176,6 +176,14 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
 
         # Opcional: reducir la tasa de mutación con el tiempo
         mutation_rate *= 0.99
+
+        for i, individuo in enumerate(resultados, 1):
+            print(
+                f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
+                f'\t beta={individuo["betas"]}, \n'
+                f'\t gamma={individuo["gammas"]}, \n'
+                f'\t fitness={individuo["fitness"]:.4f}'
+            )
 
         # Guardar los resultados de la generación en la carpeta específica del task_id
         guardar_resultados(resultados, resultados_dir, gen)

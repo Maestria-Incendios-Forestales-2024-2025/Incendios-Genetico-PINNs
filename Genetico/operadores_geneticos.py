@@ -38,30 +38,20 @@ def tournament_selection(resultados, tournament_size=3):
     best_individual = min(selected, key=lambda x: x["fitness"])
     
     # Extraer parámetros básicos
-    D, A, B, x, y = best_individual["D"], best_individual["A"], best_individual["B"], best_individual['x'], best_individual['y']
+    D, A, B, x, y = best_individual["D"], best_individual["A"], best_individual["B"], best_individual["x"], best_individual["y"]
     
     # Extraer parámetros de vegetación (si existen)
-    betas = best_individual.get('betas', [])
-    gammas = best_individual.get('gammas', [])
+    betas = best_individual.get('betas', cp.array([], dtype=cp.float32))
+    gammas = best_individual.get('gammas', cp.array([], dtype=cp.float32))
     
     # Crear array plano concatenando todos los parámetros
-    basic_params = [D, A, B, x, y]
+    basic_params = cp.array([D, A, B, x, y], dtype=cp.float32)
     
-    # Convertir betas y gammas a listas planas si no lo son
-    if isinstance(betas, (list, tuple)):
-        beta_list = list(betas)
-    else:
-        beta_list = [betas]
+    # Concatenar todos los parámetros en un solo array
+    all_params = cp.concatenate([basic_params, cp.asarray(betas, dtype=cp.float32), cp.asarray(gammas, dtype=cp.float32)])
     
-    if isinstance(gammas, (list, tuple)):
-        gamma_list = list(gammas)
-    else:
-        gamma_list = [gammas]
-    
-    # Concatenar todos los parámetros en un solo array plano
-    all_params = basic_params + beta_list + gamma_list
-    
-    return cp.array(all_params, dtype=cp.float32)
+    return all_params
+
 
 ############################## CROSSOVER #########################################################
 
