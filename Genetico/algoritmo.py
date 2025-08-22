@@ -54,6 +54,8 @@ def validate_ignition_point(x, y, incendio_referencia, limite_parametros):
 
 def validate_beta_gamma(betas, gammas):
     """Valida los parámetros beta y gamma. Beta[i] > Gamma[i] para todo i"""
+    betas = cp.array(betas, dtype=cp.float32)
+    gammas = cp.array(gammas, dtype=cp.float32)
     mask = gammas >= betas
     gammas[mask] = 0.9 * betas[mask]
     return betas, gammas
