@@ -128,7 +128,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
 
     # Cargar población inicial (preentrenada o nueva)
     if archivo_preentrenado:
-        combinaciones = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros)
+        resultados = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros)
     else:
         combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
         resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, num_steps=num_steps, batch_size=batch_size)

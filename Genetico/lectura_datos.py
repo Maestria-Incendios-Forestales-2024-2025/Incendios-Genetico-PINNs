@@ -63,14 +63,17 @@ def preprocesar_datos():
     }
 ############################## CARGA DE ARCHIVO PREENTRENADO ###############################################
 
-def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros):
+def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros, n_betas=5, n_gammas=5):
     """
     Carga una población preentrenada desde un CSV con columnas:
     D, A, B, x, y, beta_1..beta_5, gamma_1..gamma_5, fitness
 
-    Devuelve una lista de individuos:
-    [D, A, B, x, y, [beta1..beta5], [gamma1..gamma5], fitness]
+    Devuelve: lista de diccionarios con claves
+    ['D','A','B','x','y','betas','gammas','fitness'].
+    'betas' y 'gammas' son cp.ndarray (float32).
     """
+
+    print(f"Cargando población preentrenada desde: {archivo_preentrenado}")
 
     if not os.path.exists(archivo_preentrenado):
         print(f"Archivo {archivo_preentrenado} no encontrado. Generando población inicial.")
@@ -81,27 +84,23 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
         reader = csv.DictReader(f)
         for row in reader:
             try:
-                # Primeros 5 parámetros
-                parametros_basicos = [
-                    float(row['D']),
-                    float(row['A']),
-                    float(row['B']),
-                    int(float(row['x'])),
-                    int(float(row['y']))
-                ]
+                D = float(row['D']); A = float(row['A']); B = float(row['B'])
+                x = int(float(row['x'])); y = int(float(row['y']))
 
-                # Betas y gammas
-                betas = [float(row[f'beta_{i}']) for i in range(1, 6)]
-                gammas = [float(row[f'gamma_{i}']) for i in range(1, 6)]
+                betas = cp.array([float(row[f'beta_{i}']) for i in range(1, n_betas+1)],
+                                 dtype=cp.float32)
+                gammas = cp.array([float(row[f'gamma_{i}']) for i in range(1, n_gammas+1)],
+                                  dtype=cp.float32)
 
-                # Fitness
-                fitness = float(row['fitness'])
+                fval = row.get('fitness', '')
+                fitness = (float(fval) if (fval is not None and fval != '') else None)
 
-                # Guardar como lista de 8 elementos
-                poblacion_cargada.append(parametros_basicos + [betas, gammas, fitness])
-
+                poblacion_cargada.append({
+                    "D": D, "A": A, "B": B, "x": x, "y": y,
+                    "betas": betas, "gammas": gammas, "fitness": fitness
+                })
             except (ValueError, KeyError) as e:
-                print(f"WARNING: Saltando fila inválida: {row} - Error: {e}")
+                print(f"WARNING: Fila inválida, se salta. Error: {e} | Row: {row}")
                 continue
 
     # Ajustar tamaño de la población
