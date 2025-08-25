@@ -19,7 +19,7 @@ epochs_adam = 10000
 # D_I = float(sys.argv[1])
 # beta_val = float(sys.argv[2])
 beta_val = 1.0
-D_I = 0.05
+D_I = 0.005
 
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
 
