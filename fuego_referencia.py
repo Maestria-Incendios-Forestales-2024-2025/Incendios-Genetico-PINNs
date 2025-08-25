@@ -106,7 +106,7 @@ wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
 wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
 
 # Constante A adimensional de viento
-A_value = cp.float32(5e-4) # 10^-3 está al doble del límite de estabilidad
+A_value = cp.float32(1e-4) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
 B_value = cp.float32(15) # m/h
@@ -115,7 +115,7 @@ B_value = cp.float32(15) # m/h
 h_dx_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
 h_dy_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
 
-n_batch = 2
+n_batch = 1
 
 D = cp.full((n_batch), D_value, dtype=cp.float32)
 A = cp.full((n_batch), A_value, dtype=cp.float32)
@@ -227,6 +227,6 @@ print(f"Tiempo en GPU: {gpu_time:.3f} ms")
 
 # print(f'Variación de población promedio: {var_poblacion_promedio}')
 # print(f'Número de celdas rotas: {celdas_rotas}')
-# print(f'Numero de celdas quemadas: {cp.sum(R > 0.001)}')
+print(f'Numero de celdas quemadas: {cp.sum(R_new_batch > 0.001)}')
 
 
