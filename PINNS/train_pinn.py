@@ -14,9 +14,67 @@ print(f"Using device: {device}")
 temporal_domain = 10
 domain_size = 2
 
+# # Definir la red neuronal PINN
+# class FireSpread_PINN(nn.Module):
+#     def __init__(self, d=3, m=50, layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3], mu = 1.0, sigma = 0.1):
+#         super().__init__()
+
+#         # d = dimensión de entrada original (x,y,t)
+#         # m = número de frecuencias para el embedding
+
+#         # matriz B ~ N(0, sigma^2)
+#         self.B = nn.Parameter(torch.randn(m, d) * 10.0, requires_grad = False)
+
+#         # arquitectura de la red (entrada = 2m, por sin/cos)
+#         input_dim = 2 * m
+#         full_layers = [input_dim] + layers
+
+#         self.s_list = nn.ParameterList()  # escalares
+#         self.V_list = nn.ParameterList()  # pesos fijos
+#         self.bias_list = nn.ParameterList()
+
+#         for i in range(len(full_layers) - 1):
+#             out_dim = full_layers[i+1]
+#             in_dim = full_layers[i]
+
+#             # s^(l) ~ N(mu, sigma)
+#             s = nn.Parameter(torch.randn(out_dim) * sigma + mu)
+#             self.s_list.append(s)
+
+#             # V^(l) inicializado Glorot
+#             V = nn.Parameter(torch.empty(out_dim, in_dim))
+#             nn.init.xavier_uniform_(V)
+#             V.requires_grad = False  # fijo
+#             self.V_list.append(V)
+
+#             # bias entrenable
+#             b = nn.Parameter(torch.zeros(out_dim))
+#             self.bias_list.append(b)
+
+#         self.activation = nn.Tanh()
+
+#     def fourier_features(self, x):
+#         # x: (batch_size, d)
+#         # Bx -> (batch_size, m)
+#         proj = 2 * torch.pi * x @ self.B.T
+#         return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
+
+#     def forward(self, x, y, t):
+#         inputs = torch.cat((x, y, t), dim=1)
+#         out = self.fourier_features(inputs)
+
+#         for s, V, b in zip(self.s_list[:-1], self.V_list[:-1], self.bias_list[:-1]):
+#             W = torch.diag(torch.exp(s)) @ V  # factoriza pesos
+#             out = self.activation(F.linear(out, W, b))
+
+#         # última capa
+#         W = torch.diag(torch.exp(self.s_list[-1])) @ self.V_list[-1]
+#         out = F.linear(out, W, self.bias_list[-1])
+#         return out
+
 # Definir la red neuronal PINN
 class FireSpread_PINN(nn.Module):
-    def __init__(self, d=3, m=50, layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3], mu = 1.0, sigma = 0.1):
+    def __init__(self, d=3, m=250, hidden=[100]*11, out_dim=3):
         super().__init__()
 
         # d = dimensión de entrada original (x,y,t)
@@ -27,30 +85,10 @@ class FireSpread_PINN(nn.Module):
 
         # arquitectura de la red (entrada = 2m, por sin/cos)
         input_dim = 2 * m
-        full_layers = [input_dim] + layers
-
-        self.s_list = nn.ParameterList()  # escalares
-        self.V_list = nn.ParameterList()  # pesos fijos
-        self.bias_list = nn.ParameterList()
-
-        for i in range(len(full_layers) - 1):
-            out_dim = full_layers[i+1]
-            in_dim = full_layers[i]
-
-            # s^(l) ~ N(mu, sigma)
-            s = nn.Parameter(torch.randn(out_dim) * sigma + mu)
-            self.s_list.append(s)
-
-            # V^(l) inicializado Glorot
-            V = nn.Parameter(torch.empty(out_dim, in_dim))
-            nn.init.xavier_uniform_(V)
-            V.requires_grad = False  # fijo
-            self.V_list.append(V)
-
-            # bias entrenable
-            b = nn.Parameter(torch.zeros(out_dim))
-            self.bias_list.append(b)
-
+        full_layers = [input_dim] + hidden + [out_dim]
+        self.layers = nn.ModuleList(
+            [nn.Linear(full_layers[i], full_layers[i+1]) for i in range(len(full_layers)-1)]
+        )
         self.activation = nn.Tanh()
 
     def fourier_features(self, x):
@@ -60,17 +98,12 @@ class FireSpread_PINN(nn.Module):
         return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
 
     def forward(self, x, y, t):
-        inputs = torch.cat((x, y, t), dim=1)
-        out = self.fourier_features(inputs)
-
-        for s, V, b in zip(self.s_list[:-1], self.V_list[:-1], self.bias_list[:-1]):
-            W = torch.diag(torch.exp(s)) @ V  # factoriza pesos
-            out = self.activation(F.linear(out, W, b))
-
-        # última capa
-        W = torch.diag(torch.exp(self.s_list[-1])) @ self.V_list[-1]
-        out = F.linear(out, W, self.bias_list[-1])
-        return out
+        inputs = torch.cat((x, y, t), dim=1) # (batch, 3)
+        ff = self.fourier_features(inputs) # (batch, 2m)
+        out = ff
+        for layer in self.layers[:-1]:
+            out = self.activation(layer(out))
+        return self.layers[-1](out)
 
 ############################## PÉRDIDA POR CONDICIONES INICIALES ###############################################
 
