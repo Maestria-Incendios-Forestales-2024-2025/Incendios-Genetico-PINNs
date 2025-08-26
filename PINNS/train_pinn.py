@@ -195,8 +195,8 @@ class FireSpread_PINN(nn.Module):
     
     # -------------------- Closure para optimización --------------------
     def closure(self, optimizer, data, params):
-        loss_ic = self.loss_ic(*data['ic'])
-        loss_bc = self.loss_bc(*data['bc'])
+        loss_ic = self.loss_initial_condition(*data['ic'])
+        loss_bc = self.loss_boundary_condition(*data['bc'])
         loss_phys = self.loss_pde(*data['phys'], *params)
         total_loss = loss_ic + loss_bc + loss_phys
         optimizer.zero_grad()
@@ -244,7 +244,6 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
     y_boundary = domain_size*torch.rand(N_boundary, 1, device=device) # y en (0, 1)
     t_boundary = temporal_domain*torch.rand(N_boundary, 1, device=device) # t en (0, 1)
 
-    # loss_phys_list, loss_bc_list, loss_ic_list, loss_nonneg_list = [], [], [], []
     loss_phys_list, loss_bc_list, loss_ic_list = [], [], []
 
     best_loss = float('inf')
@@ -254,7 +253,7 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
 
     # --------- Primera etapa: Adam ---------
     for epoch in range(epochs_adam):
-        if epoch % 200 == 0 and epoch > 0: # Sampleo adaptativo cada 200 épocas
+        if epoch % 500 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
             x_interior, y_interior, t_interior = model.sample_by_nonlinearity(N_interior)
             x_interior.requires_grad = y_interior.requires_grad = t_interior.requires_grad = True
 
@@ -278,40 +277,25 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
 
         params = (D_I, beta_val, gamma_val)
 
-        optimizer.zero_grad()
-        loss_phys, loss_ic, loss_bc = model.closure(optimizer, data, params)
-
-        # Penalizamos los valores negativos
-        # x_interior.requires_grad = True
-        # y_interior.requires_grad = True
-        # t_interior.requires_grad = True
-        # SIR_pred = model(x_interior, y_interior, t_interior)
-        # S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
-        # loss_nonneg = non_negative_loss(S_pred, I_pred, R_pred)
-
-        loss = loss_phys + loss_ic + loss_bc #+ loss_nonneg
-        loss.backward()
+        total_loss, loss_phys, loss_ic, loss_bc = model.closure(optimizer, data, params)
         optimizer.step()
 
         # Guardar cada pérdida individual
         loss_phys_list.append(loss_phys.item())
         loss_ic_list.append(loss_ic.item())
         loss_bc_list.append(loss_bc.item())
-        # loss_nonneg_list.append(loss_nonneg.item())
 
         # 📌 Guardar el mejor modelo
-        if loss.item() < best_loss:
-            best_loss = loss.item()
+        if total_loss.item() < best_loss:
+            best_loss = total_loss.item()
             best_model_state = copy.deepcopy(model.state_dict())
-            # print(f"✅ Mejor modelo guardado en epoch {epoch} con pérdida total {best_loss:.2e}")
 
         if epoch % 100 == 0 or epoch == epochs_adam - 1:
-            print(f"Adam Época {epoch} | Loss: {loss.item()}")
+            print(f"Adam Época {epoch} | Loss: {total_loss.item()}")
 
     np.save("loss_phys.npy", np.array(loss_phys_list))
     np.save("loss_ic.npy", np.array(loss_ic_list))
     np.save("loss_bc.npy", np.array(loss_bc_list))
-    # np.save("loss_nonneg.npy", np.array(loss_nonneg_list))
 
     # Restaurar el mejor modelo en memoria
     if best_model_state is not None:
