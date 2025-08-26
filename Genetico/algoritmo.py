@@ -143,6 +143,8 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
                 f'\t fitness={individuo["fitness"]:.4f}'
             )
 
+    # Guardar los resultados de la generación en la carpeta específica del task_id
+    guardar_resultados(resultados, resultados_dir, 0)
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 
     for gen in range(generaciones):
