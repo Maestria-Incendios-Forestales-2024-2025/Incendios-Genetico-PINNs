@@ -5,7 +5,8 @@ import random
 
 def poblacion_inicial(tamano_poblacion, limite_parametros):
     """
-    Genera población inicial con parámetros básicos + parámetros de vegetación.
+    Genera población inicial con parámetros básicos + parámetros de vegetación
+    totalmente en GPU.
     
     Args:
         tamano_poblacion: Número de individuos
@@ -14,21 +15,25 @@ def poblacion_inicial(tamano_poblacion, limite_parametros):
     Returns:
         Array de CuPy con individuos (cada fila es un individuo)
     """
-    # Generar población aleatoria para todos los parámetros
     poblacion = []
-    
+
     for _ in range(tamano_poblacion):
-        individuo = []
+        individuo = cp.zeros(len(limite_parametros), dtype=cp.float32)
+
         for i, (low, high) in enumerate(limite_parametros):
-            valor = cp.random.uniform(low, high)
-            # Generar valor aleatorio entre low y high
-            if i > 9 and i <= 14:
-                while valor > individuo[i - 5]: # evitar que beta sea menor que gamma
-                    valor = cp.random.uniform(low, high)
-            individuo.append(float(valor))
+            valor = cp.random.uniform(low, high, dtype=cp.float32)
+
+            # Reglas para gamma <= beta
+            if 10 <= i <= 14:  # gamma
+                beta_val = individuo[i - 5]
+                while valor > beta_val:
+                    valor = cp.random.uniform(low, high, dtype=cp.float32)
+
+            individuo[i] = valor
+
         poblacion.append(individuo)
-    
-    return cp.array(poblacion, dtype=cp.float32)
+
+    return cp.stack(poblacion)
 
 ############################## SELECCIÓN DE TORNEO ###############################################
 

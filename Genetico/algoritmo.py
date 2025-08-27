@@ -25,7 +25,7 @@ def validate_courant_and_adjust(A, B):
     """Valida la condición de Courant y ajusta parámetros si es necesario."""
     
     iteraciones = 0
-    while not courant(dt, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
+    while not courant(dt/2, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
         iteraciones += 1
         # Alternativa más eficiente: seleccionar aleatoriamente entre 0, 1
         param_idx = int(cp.random.randint(0, 2))  # 0, 1
