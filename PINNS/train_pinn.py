@@ -150,30 +150,63 @@ class FireSpread_PINN(nn.Module):
         return loss_top_bc + loss_left_bc
 
     #---------------- PÉRDIDA POR LA FÍSICA ----------------#
-    def loss_pde(self, x_phys, y_phys, t_phys, D_I, beta_val, gamma_val):
-        x_phys.requires_grad = True
-        y_phys.requires_grad = True
-        t_phys.requires_grad = True
+    def loss_pde(self, x_phys, y_phys, t_phys, D_I, beta_val, gamma_val, temporal_weights, N_blocks):
+        # Crear bloques temporales
+        T_final = temporal_domain
+        t_blocks = torch.linspace(0, T_final, N_blocks + 1, device=device)
 
-        SIR_pred = self.forward(x_phys, y_phys, t_phys)
-        S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
+        # Lista para pérdidas por bloque
+        block_losses = []
 
-        dS_dt = torch.autograd.grad(S_pred, t_phys, torch.ones_like(S_pred), create_graph=True)[0]
-        dI_dt = torch.autograd.grad(I_pred, t_phys, torch.ones_like(I_pred), create_graph=True)[0]
-        dR_dt = torch.autograd.grad(R_pred, t_phys, torch.ones_like(R_pred), create_graph=True)[0]
+        for i in range(N_blocks):
+            t_start, t_end = t_blocks[i].item(), t_blocks[i + 1].item()
 
-        dI_dx = torch.autograd.grad(I_pred, x_phys, torch.ones_like(I_pred), create_graph=True)[0]
-        dI_dy = torch.autograd.grad(I_pred, y_phys, torch.ones_like(I_pred), create_graph=True)[0]
+            # Máscara de puntos en el bloque temporal
+            mask = (t_phys >= t_start) & ((t_phys < t_end) | (i == N_blocks - 1))  # incluir último punto
+            if mask.sum() == 0:
+                print("No hay puntos en el bloque temporal")
+                block_loss = torch.tensor(0.0, device=device)
+            else:
+                x_block = x_phys[mask].unsqueeze(1)
+                y_block = y_phys[mask].unsqueeze(1)
+                t_block = t_phys[mask].unsqueeze(1)
 
-        d2I_dx2 = torch.autograd.grad(dI_dx, x_phys, torch.ones_like(dI_dx), create_graph=True)[0]
-        d2I_dy2 = torch.autograd.grad(dI_dy, y_phys, torch.ones_like(dI_dy), create_graph=True)[0]
+                # Predicción de la red
+                SIR_pred = self.forward(x_block, y_block, t_block)
+                S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
 
-        loss_S = dS_dt + beta_val * S_pred * I_pred
-        loss_I = dI_dt - (beta_val * S_pred * I_pred - gamma_val * I_pred) - D_I * (d2I_dx2 + d2I_dy2)
-        loss_R = dR_dt - gamma_val * I_pred
+                # Derivadas temporales
+                dS_dt = torch.autograd.grad(S_pred, t_block, torch.ones_like(S_pred), create_graph=True)[0]
+                dI_dt = torch.autograd.grad(I_pred, t_block, torch.ones_like(I_pred), create_graph=True)[0]
+                dR_dt = torch.autograd.grad(R_pred, t_block, torch.ones_like(R_pred), create_graph=True)[0]
 
-        return (loss_S**2 + loss_I**2 + loss_R**2).mean()
-    
+                # Derivadas espaciales
+                dI_dx = torch.autograd.grad(I_pred, x_block, torch.ones_like(I_pred), create_graph=True)[0]
+                dI_dy = torch.autograd.grad(I_pred, y_block, torch.ones_like(I_pred), create_graph=True)[0]
+                d2I_dx2 = torch.autograd.grad(dI_dx, x_block, torch.ones_like(dI_dx), create_graph=True)[0]
+                d2I_dy2 = torch.autograd.grad(dI_dy, y_block, torch.ones_like(dI_dy), create_graph=True)[0]
+
+                # Residuales PDE
+                loss_S = dS_dt + beta_val * S_pred * I_pred
+                loss_I = dI_dt - (beta_val * S_pred * I_pred - gamma_val * I_pred) - D_I * (d2I_dx2 + d2I_dy2)
+                loss_R = dR_dt - gamma_val * I_pred
+
+                block_loss = (loss_S**2 + loss_I**2 + loss_R**2).mean()
+
+                # Chequeo NaN/Inf
+                if torch.isnan(block_loss) or torch.isinf(block_loss):
+                    print(f"Warning: NaN/Inf en bloque {i}, asignando 0")
+                    block_loss = torch.tensor(0.0, device=device)
+
+            block_losses.append(block_loss)
+
+        # Tensor con pérdidas por bloque
+        block_losses_tensor = torch.stack(block_losses)  # GPU
+        pde_loss = torch.sum(temporal_weights * block_losses_tensor) / N_blocks
+        temporal_loss = block_losses_tensor.detach()  # detach para usar en re-pesado temporal sin grafo
+
+        return pde_loss, temporal_loss
+
     # -------------------- Pérdida por no negatividad --------------------
     def non_negative_loss(self, x, y, t):
         S, I, R = self.forward(x, y, t).split(1, dim=1)
@@ -184,7 +217,10 @@ class FireSpread_PINN(nn.Module):
     def sample_by_nonlinearity(self, N_samples, N_candidates=100000, initial_points=False):
         x = domain_size*torch.rand(N_candidates, 1, device=device)
         y = domain_size*torch.rand(N_candidates, 1, device=device)
-        t = torch.zeros(N_candidates, 1, device=device) if initial_points else temporal_domain*torch.rand(N_candidates, 1, device=device)
+        if initial_points:
+            t = torch.zeros(N_candidates, 1, device=device)
+        else:
+            t = temporal_domain * torch.rand(N_candidates, 1, device=device)
 
         with torch.no_grad():
             S_pred, I_pred, _ = self.forward(x, y, t).split(1, dim=1)
@@ -197,11 +233,11 @@ class FireSpread_PINN(nn.Module):
     def closure(self, optimizer, data, params):
         loss_ic = self.loss_initial_condition(*data['ic'])
         loss_bc = self.loss_boundary_condition(*data['bc'])
-        loss_phys = self.loss_pde(*data['phys'], *params)
+        loss_phys, temporal_losses = self.loss_pde(*data['phys'], *params)
         total_loss = loss_ic + loss_bc + loss_phys
         optimizer.zero_grad()
         total_loss.backward()
-        return total_loss, loss_ic, loss_bc, loss_phys
+        return total_loss, loss_phys, loss_ic, loss_bc, temporal_losses
 
 ############################## ENTRENAMIENTO ###############################################
 
@@ -249,13 +285,13 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
     best_loss = float('inf')
     best_model_state = None
 
+    temporal_weights = torch.ones(N_blocks, device=device)
+
     print(f"Entrenando PINNs con D = {D_I}, beta = {beta_val}, gamma = {gamma_val}")
 
-    # --------- Primera etapa: Adam ---------
     for epoch in range(epochs_adam):
         if epoch % 500 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
             x_interior, y_interior, t_interior = model.sample_by_nonlinearity(N_interior)
-            x_interior.requires_grad = y_interior.requires_grad = t_interior.requires_grad = True
 
             x_init, y_init, t_init = model.sample_by_nonlinearity(N_initial-1, initial_points=True)
 
@@ -275,10 +311,15 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
             'phys': (x_interior, y_interior, t_interior)
         }
 
-        params = (D_I, beta_val, gamma_val)
+        params = (D_I, beta_val, gamma_val, temporal_weights, N_blocks)
 
-        total_loss, loss_phys, loss_ic, loss_bc = model.closure(optimizer, data, params)
+        total_loss, loss_phys, loss_ic, loss_bc, temporal_losses = model.closure(optimizer, data, params)
         optimizer.step()
+
+        # Actualización de pesos temporales
+        partial_sums = torch.cumsum(temporal_losses.detach(), dim=0)  # sumatoria acumulada por bloques
+        temporal_weights = torch.exp(-partial_sums)                  # exp(-sum) por bloque
+        temporal_weights[0] = 1.0  
 
         # Guardar cada pérdida individual
         loss_phys_list.append(loss_phys.item())
@@ -290,8 +331,8 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
             best_loss = total_loss.item()
             best_model_state = copy.deepcopy(model.state_dict())
 
-        if epoch % 100 == 0 or epoch == epochs_adam - 1:
-            print(f"Adam Época {epoch} | Loss: {total_loss.item()}")
+        # if epoch % 100 == 0 or epoch == epochs_adam - 1:
+        print(f"Adam Época {epoch} | Loss: {total_loss.item()}")
 
     np.save("loss_phys.npy", np.array(loss_phys_list))
     np.save("loss_ic.npy", np.array(loss_ic_list))
@@ -303,7 +344,3 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         model.eval()
 
     return model, best_loss
-
-if __name__ == "__main__":
-    model = FireSpread_PINN().to(device)
-    print(model)
