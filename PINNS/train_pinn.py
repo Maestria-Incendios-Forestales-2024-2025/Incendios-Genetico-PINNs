@@ -162,14 +162,15 @@ class FireSpread_PINN(nn.Module):
             t_start, t_end = t_blocks[i].item(), t_blocks[i + 1].item()
 
             # Máscara de puntos en el bloque temporal
-            mask = (t_phys >= t_start) & ((t_phys < t_end) | (i == N_blocks - 1))  # incluir último punto
+            t1 = t_phys.squeeze(-1)
+            mask = (t1 >= t_start) & ((t1 < t_end) | (i == N_blocks - 1))  # incluir último punto
             if mask.sum() == 0:
                 print("No hay puntos en el bloque temporal")
                 block_loss = torch.tensor(0.0, device=device)
             else:
-                x_block = x_phys[mask].unsqueeze(1)
-                y_block = y_phys[mask].unsqueeze(1)
-                t_block = t_phys[mask].unsqueeze(1)
+                x_block = x_phys[mask]
+                y_block = y_phys[mask]
+                t_block = t_phys[mask]
 
                 # Predicción de la red
                 SIR_pred = self.forward(x_block, y_block, t_block)
@@ -225,7 +226,13 @@ class FireSpread_PINN(nn.Module):
         with torch.no_grad():
             S_pred, I_pred, _ = self.forward(x, y, t).split(1, dim=1)
             nonlin_strength = torch.abs(S_pred * I_pred).squeeze()
-            weights = nonlin_strength / nonlin_strength.sum()
+            denom = nonlin_strength.sum()
+            eps = 1e-12
+            if torch.isnan(denom) or denom <= eps:
+                # Caer a muestreo uniforme si no hay señal de no linealidad
+                weights = torch.full((N_candidates,), 1.0 / N_candidates, device=device)
+            else:
+                weights = nonlin_strength / (denom + eps)
             idx = torch.multinomial(weights, N_samples, replacement=False)
         return x[idx], y[idx], t[idx]
     
@@ -237,7 +244,7 @@ class FireSpread_PINN(nn.Module):
         total_loss = loss_ic + loss_bc + loss_phys
         optimizer.zero_grad()
         total_loss.backward()
-        return total_loss, loss_phys, loss_ic, loss_bc, temporal_losses
+        return (total_loss.detach(), loss_phys.detach(), loss_ic.detach(), loss_bc.detach(), temporal_losses)
 
 ############################## ENTRENAMIENTO ###############################################
 
@@ -290,8 +297,9 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
     print(f"Entrenando PINNs con D = {D_I}, beta = {beta_val}, gamma = {gamma_val}")
 
     for epoch in range(epochs_adam):
-        if epoch % 500 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
+        if epoch % 100 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
             x_interior, y_interior, t_interior = model.sample_by_nonlinearity(N_interior)
+            x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
 
             x_init, y_init, t_init = model.sample_by_nonlinearity(N_initial-1, initial_points=True)
 
@@ -316,10 +324,11 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         total_loss, loss_phys, loss_ic, loss_bc, temporal_losses = model.closure(optimizer, data, params)
         optimizer.step()
 
-        # Actualización de pesos temporales
+        # Actualización de pesos temporales (con normalización para estabilidad)
         partial_sums = torch.cumsum(temporal_losses.detach(), dim=0)  # sumatoria acumulada por bloques
-        temporal_weights = torch.exp(-partial_sums)                  # exp(-sum) por bloque
-        temporal_weights[0] = 1.0  
+        temporal_weights = torch.exp(-partial_sums)                   # exp(-sum) por bloque
+        temporal_weights[0] = 1.0
+        temporal_weights = temporal_weights / (temporal_weights.mean() + 1e-12)
 
         # Guardar cada pérdida individual
         loss_phys_list.append(loss_phys.item())
