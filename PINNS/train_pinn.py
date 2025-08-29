@@ -313,6 +313,8 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
 
             print(f"[Epoch {epoch}] Sampleo adaptativo realizado.")
 
+        
+
         data = {
             'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
             'bc': (y_top, y_bottom, x_left, x_right, x_boundary, y_boundary, t_boundary),
@@ -341,7 +343,7 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
             best_model_state = copy.deepcopy(model.state_dict())
 
         # if epoch % 100 == 0 or epoch == epochs_adam - 1:
-        print(f"Adam Época {epoch} | Loss: {total_loss.item()}")
+        print(f"Adam Época {epoch} | Loss: {total_loss.item()} | PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | BC Loss: {loss_bc.item()}")
 
     np.save("loss_phys.npy", np.array(loss_phys_list))
     np.save("loss_ic.npy", np.array(loss_ic_list))
