@@ -73,16 +73,19 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
     'betas' y 'gammas' son cp.ndarray (float32).
     """
 
-    print(f"Cargando población preentrenada desde: {archivo_preentrenado}")
+    print(f"[DEBUG] Cargando población preentrenada desde: {archivo_preentrenado}")
 
     if not os.path.exists(archivo_preentrenado):
-        print(f"Archivo {archivo_preentrenado} no encontrado. Generando población inicial.")
+        print(f"[DEBUG] Archivo {archivo_preentrenado} no encontrado. Generando población inicial.")
         return poblacion_inicial(tamano_poblacion, limite_parametros)
 
     poblacion_cargada = []
     with open(archivo_preentrenado, 'r') as f:
         reader = csv.DictReader(f)
-        for row in reader:
+        total_rows = sum(1 for _ in open(archivo_preentrenado)) - 1  # sin header
+        f.seek(0)  # volver al inicio después del conteo
+
+        for idx, row in enumerate(reader, start=1):
             try:
                 D = float(row['D']); A = float(row['A']); B = float(row['B'])
                 x = int(float(row['x'])); y = int(float(row['y']))
@@ -99,26 +102,38 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
                     "D": D, "A": A, "B": B, "x": x, "y": y,
                     "betas": betas, "gammas": gammas, "fitness": fitness
                 })
+
+                # Prints de debug solo en casos selectos
+                if idx <= 3 or idx == total_rows // 2 or idx == total_rows:
+                    print(f"[DEBUG] Fila {idx}/{total_rows}: "
+                          f"D={D}, A={A}, B={B}, x={x}, y={y}, "
+                          f"betas={betas.get()}, gammas={gammas.get()}, fitness={fitness}")
+
             except (ValueError, KeyError) as e:
-                print(f"WARNING: Fila inválida, se salta. Error: {e} | Row: {row}")
+                if idx <= 5:  # solo aviso explícito en las primeras filas
+                    print(f"[WARNING] Fila inválida {idx}, se salta. Error: {e}")
                 continue
 
     # Ajustar tamaño de la población
     num_cargados = len(poblacion_cargada)
+    print(f"\n[DEBUG] Total individuos cargados: {num_cargados}")
+
     if num_cargados == 0:
-        print("No se cargaron individuos válidos. Generando población inicial.")
+        print("[DEBUG] No se cargaron individuos válidos. Generando población inicial.")
         return poblacion_inicial(tamano_poblacion, limite_parametros)
 
     if num_cargados > tamano_poblacion:
+        print(f"[DEBUG] Se cargaron {num_cargados}, recortando a {tamano_poblacion}")
         indices = cp.random.choice(num_cargados, tamano_poblacion, replace=False)
         poblacion_cargada = [poblacion_cargada[i] for i in indices.get()]
     elif num_cargados < tamano_poblacion:
         faltantes = tamano_poblacion - num_cargados
+        print(f"[DEBUG] Faltan {faltantes} individuos. Generando población inicial para completar.")
         nuevos = poblacion_inicial(faltantes, limite_parametros)
-        # Cada nuevo individuo se convierte en 5 parámetros + listas vacías + fitness None
         nuevos_formateados = [n + [[], [], None] for n in nuevos]
         poblacion_cargada += nuevos_formateados
 
+    print(f"[DEBUG] Población final: {len(poblacion_cargada)} individuos.")
     return poblacion_cargada
 
     
