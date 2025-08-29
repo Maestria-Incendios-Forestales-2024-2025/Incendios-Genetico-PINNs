@@ -112,6 +112,7 @@ class FireSpread_PINN(nn.Module):
         for i in range(len(layers) - 1):
             self.layers.append(nn.Linear(layers[i], layers[i+1]))
         self.activation = nn.Tanh()
+        self.w_ic, self.w_bc, self.w_pde = 1.0, 1.0, 1.0  # inicialización por defecto
 
     def forward(self, x, y, t):
         inputs = torch.cat((x, y, t), dim=1)
@@ -208,13 +209,43 @@ class FireSpread_PINN(nn.Module):
 
         return pde_loss, temporal_loss
 
-    # -------------------- Pérdida por no negatividad --------------------
+    # -------------------- PÉRDIDA POR NO NEGATIVIDAD --------------------
     def non_negative_loss(self, x, y, t):
         S, I, R = self.forward(x, y, t).split(1, dim=1)
         loss = torch.mean(torch.relu(-S)) + torch.mean(torch.relu(-I)) + torch.mean(torch.relu(-R))
         return loss
+    
+    # -------------------- ACTUALIZACIÓN DE PESOS --------------------
+    def update_loss_weights(self, loss_ic, loss_bc, loss_phys):
+        """
+        Recalcula pesos adaptativos para IC, BC y PDE cada 'every' épocas.
+        """
+        eps = 1e-8
+        params_for_grad = [p for p in self.parameters() if p.requires_grad]
 
-    # -------------------- Sampleo por no linealidad --------------------
+        grads_ic = torch.autograd.grad(loss_ic, params_for_grad, retain_graph=True, create_graph=False, allow_unused=True)
+        grads_bc = torch.autograd.grad(loss_bc, params_for_grad, retain_graph=True, create_graph=False, allow_unused=True)
+        grads_pde = torch.autograd.grad(loss_phys, params_for_grad, retain_graph=True, create_graph=False, allow_unused=True)
+
+        def grad_norm(grads):
+            total = torch.tensor(0.0, device=device)
+            for g in grads:
+                if g is not None:
+                    total = total + (g.detach()**2).sum()
+            return total.sqrt()
+
+        g_ic, g_bc, g_pde = grad_norm(grads_ic), grad_norm(grads_bc), grad_norm(grads_pde)
+        norms = torch.stack([g_ic, g_bc, g_pde]).clamp(min=eps)
+
+        lambdas = (norms.sum() / norms)  
+        lambdas = lambdas / lambdas.mean()  # normalización
+
+        # actualizar atributos internos
+        self.w_ic, self.w_bc, self.w_pde = [l.item() for l in lambdas]
+
+        return self.w_ic, self.w_bc, self.w_pde
+
+    # -------------------- SAMPLEO POR NO LINEALIDAD --------------------
     def sample_by_nonlinearity(self, N_samples, N_candidates=100000, initial_points=False):
         x = domain_size*torch.rand(N_candidates, 1, device=device)
         y = domain_size*torch.rand(N_candidates, 1, device=device)
@@ -235,16 +266,27 @@ class FireSpread_PINN(nn.Module):
                 weights = nonlin_strength / (denom + eps)
             idx = torch.multinomial(weights, N_samples, replacement=False)
         return x[idx], y[idx], t[idx]
-    
-    # -------------------- Closure para optimización --------------------
+
+    # -------------------- CLOSURE PARA OPTIMIZACIÓN --------------------
     def closure(self, optimizer, data, params):
+        # calcular pérdidas
         loss_ic = self.loss_initial_condition(*data['ic'])
         loss_bc = self.loss_boundary_condition(*data['bc'])
         loss_phys, temporal_losses = self.loss_pde(*data['phys'], *params)
-        total_loss = loss_ic + loss_bc + loss_phys
+
+        # combinación lineal con los pesos
+        total_loss = self.w_ic * loss_ic + self.w_bc * loss_bc + self.w_pde * loss_phys
+
         optimizer.zero_grad()
         total_loss.backward()
-        return (total_loss.detach(), loss_phys.detach(), loss_ic.detach(), loss_bc.detach(), temporal_losses)
+
+        return (
+            total_loss.detach(),
+            loss_phys.detach(),
+            loss_ic.detach(),
+            loss_bc.detach(),
+            temporal_losses,
+        )
 
 ############################## ENTRENAMIENTO ###############################################
 
@@ -297,7 +339,7 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
     print(f"Entrenando PINNs con D = {D_I}, beta = {beta_val}, gamma = {gamma_val}")
 
     for epoch in range(epochs_adam):
-        if epoch % 100 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
+        if epoch % 500 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
             x_interior, y_interior, t_interior = model.sample_by_nonlinearity(N_interior)
             x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
 
@@ -312,8 +354,6 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
             R_init = torch.zeros_like(I_init)
 
             print(f"[Epoch {epoch}] Sampleo adaptativo realizado.")
-
-        
 
         data = {
             'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
@@ -336,6 +376,10 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         loss_phys_list.append(loss_phys.item())
         loss_ic_list.append(loss_ic.item())
         loss_bc_list.append(loss_bc.item())
+
+        # Actualización de pesos
+        if epoch % 1000 == 0 and epoch > 0:
+            model.w_ic, model.w_bc, model.w_pde = model.update_loss_weights(loss_ic, loss_bc, loss_phys)
 
         # 📌 Guardar el mejor modelo
         if total_loss.item() < best_loss:
