@@ -112,8 +112,11 @@ class FireSpread_PINN(nn.Module):
         for i in range(len(layers) - 1):
             self.layers.append(nn.Linear(layers[i], layers[i+1]))
         self.activation = nn.Tanh()
-        self.w_ic, self.w_bc, self.w_pde = 1.0, 1.0, 1.0  # inicialización por defecto
-
+        # inicialización como tensores en el device
+        self.w_ic  = torch.tensor(1.0, device=device)
+        self.w_bc  = torch.tensor(1.0, device=device)
+        self.w_pde = torch.tensor(1.0, device=device)
+    
     def forward(self, x, y, t):
         inputs = torch.cat((x, y, t), dim=1)
         x_scaled = 2 * (inputs[:, 0:1] / domain_size) - 1
