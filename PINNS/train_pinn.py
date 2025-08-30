@@ -281,14 +281,15 @@ class FireSpread_PINN(nn.Module):
         total_loss = self.w_ic * loss_ic + self.w_bc * loss_bc + self.w_pde * loss_phys
 
         optimizer.zero_grad()
-        total_loss.backward()
+        # Retener grafo para permitir autograd.grad en update_loss_weights
+        total_loss.backward(retain_graph=True)
 
         return (
             total_loss.detach(),
-            loss_phys.detach(),
-            loss_ic.detach(),
-            loss_bc.detach(),
-            temporal_losses,
+            loss_phys,  # no detach: se necesita el grafo para autograd.grad
+            loss_ic,    # no detach
+            loss_bc,    # no detach
+            temporal_losses.detach(),
         )
 
 ############################## ENTRENAMIENTO ###############################################
@@ -367,7 +368,6 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         params = (D_I, beta_val, gamma_val, temporal_weights, N_blocks)
 
         total_loss, loss_phys, loss_ic, loss_bc, temporal_losses = model.closure(optimizer, data, params)
-        optimizer.step()
 
         # Actualización de pesos temporales (con normalización para estabilidad)
         partial_sums = torch.cumsum(temporal_losses.detach(), dim=0)  # sumatoria acumulada por bloques
@@ -375,21 +375,24 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         temporal_weights[0] = 1.0
         temporal_weights = temporal_weights / (temporal_weights.mean() + 1e-12)
 
+        # Actualización de pesos (usar el grafo antes del step)
+        if epoch % 100 == 0:
+            model.w_ic, model.w_bc, model.w_pde = model.update_loss_weights(loss_ic, loss_bc, loss_phys)
+            print(f"[Epoch {epoch}] Pesos actualizados: w_pde = {model.w_pde}, w_ic = {model.w_ic}, w_bc = {model.w_bc}")
+
+        optimizer.step()
+
         # Guardar cada pérdida individual
         loss_phys_list.append(loss_phys.item())
         loss_ic_list.append(loss_ic.item())
         loss_bc_list.append(loss_bc.item())
-
-        # Actualización de pesos
-        if epoch % 1000 == 0 and epoch > 0:
-            model.w_ic, model.w_bc, model.w_pde = model.update_loss_weights(loss_ic, loss_bc, loss_phys)
 
         # 📌 Guardar el mejor modelo
         if total_loss.item() < best_loss:
             best_loss = total_loss.item()
             best_model_state = copy.deepcopy(model.state_dict())
 
-        # if epoch % 100 == 0 or epoch == epochs_adam - 1:
+        # if epoch % 100 == 0 o epoch == epochs_adam - 1:
         print(f"Adam Época {epoch} | Loss: {total_loss.item()} | PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | BC Loss: {loss_bc.item()}")
 
     np.save("loss_phys.npy", np.array(loss_phys_list))
