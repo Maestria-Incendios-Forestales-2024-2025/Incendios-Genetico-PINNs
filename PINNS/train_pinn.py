@@ -1,7 +1,6 @@
 import torch # type: ignore
 import torch.nn as nn # type: ignore
 import torch.optim as optim # type: ignore
-import torch.nn.functional as F
 import numpy as np # type: ignore
 import copy
 
@@ -13,97 +12,7 @@ print(f"Using device: {device}")
 
 temporal_domain = 10
 domain_size = 2
-
-# # Definir la red neuronal PINN
-# class FireSpread_PINN(nn.Module):
-#     def __init__(self, d=3, m=50, layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3], mu = 1.0, sigma = 0.1):
-#         super().__init__()
-
-#         # d = dimensión de entrada original (x,y,t)
-#         # m = número de frecuencias para el embedding
-
-#         # matriz B ~ N(0, sigma^2)
-#         self.B = nn.Parameter(torch.randn(m, d) * 10.0, requires_grad = False)
-
-#         # arquitectura de la red (entrada = 2m, por sin/cos)
-#         input_dim = 2 * m
-#         full_layers = [input_dim] + layers
-
-#         self.s_list = nn.ParameterList()  # escalares
-#         self.V_list = nn.ParameterList()  # pesos fijos
-#         self.bias_list = nn.ParameterList()
-
-#         for i in range(len(full_layers) - 1):
-#             out_dim = full_layers[i+1]
-#             in_dim = full_layers[i]
-
-#             # s^(l) ~ N(mu, sigma)
-#             s = nn.Parameter(torch.randn(out_dim) * sigma + mu)
-#             self.s_list.append(s)
-
-#             # V^(l) inicializado Glorot
-#             V = nn.Parameter(torch.empty(out_dim, in_dim))
-#             nn.init.xavier_uniform_(V)
-#             V.requires_grad = False  # fijo
-#             self.V_list.append(V)
-
-#             # bias entrenable
-#             b = nn.Parameter(torch.zeros(out_dim))
-#             self.bias_list.append(b)
-
-#         self.activation = nn.Tanh()
-
-#     def fourier_features(self, x):
-#         # x: (batch_size, d)
-#         # Bx -> (batch_size, m)
-#         proj = 2 * torch.pi * x @ self.B.T
-#         return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
-
-#     def forward(self, x, y, t):
-#         inputs = torch.cat((x, y, t), dim=1)
-#         out = self.fourier_features(inputs)
-
-#         for s, V, b in zip(self.s_list[:-1], self.V_list[:-1], self.bias_list[:-1]):
-#             W = torch.diag(torch.exp(s)) @ V  # factoriza pesos
-#             out = self.activation(F.linear(out, W, b))
-
-#         # última capa
-#         W = torch.diag(torch.exp(self.s_list[-1])) @ self.V_list[-1]
-#         out = F.linear(out, W, self.bias_list[-1])
-#         return out
-
-# # Definir la red neuronal PINN
-# class FireSpread_PINN(nn.Module):
-#     def __init__(self, d=3, m=250, hidden=[100]*11, out_dim=3):
-#         super().__init__()
-
-#         # d = dimensión de entrada original (x,y,t)
-#         # m = número de frecuencias para el embedding
-
-#         # matriz B ~ N(0, sigma^2)
-#         self.B = nn.Parameter(torch.randn(m, d) * 10.0, requires_grad = False)
-
-#         # arquitectura de la red (entrada = 2m, por sin/cos)
-#         input_dim = 2 * m
-#         full_layers = [input_dim] + hidden + [out_dim]
-#         self.layers = nn.ModuleList(
-#             [nn.Linear(full_layers[i], full_layers[i+1]) for i in range(len(full_layers)-1)]
-#         )
-#         self.activation = nn.Tanh()
-
-#     def fourier_features(self, x):
-#         # x: (batch_size, d)
-#         # Bx -> (batch_size, m)
-#         proj = 2 * torch.pi * x @ self.B.T
-#         return torch.cat([torch.sin(proj), torch.cos(proj)], dim=-1)
-
-#     def forward(self, x, y, t):
-#         inputs = torch.cat((x, y, t), dim=1) # (batch, 3)
-#         ff = self.fourier_features(inputs) # (batch, 2m)
-#         out = ff
-#         for layer in self.layers[:-1]:
-#             out = self.activation(layer(out))
-#         return self.layers[-1](out)
+MAX_BLOCK_POINTS = 4096  # límite de puntos por bloque temporal para estabilidad de memoria
 
 class FireSpread_PINN(nn.Module):
     def __init__(self, layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3]):
@@ -168,13 +77,19 @@ class FireSpread_PINN(nn.Module):
             # Máscara de puntos en el bloque temporal
             t1 = t_phys.squeeze(-1)
             mask = (t1 >= t_start) & ((t1 < t_end) | (i == N_blocks - 1))  # incluir último punto
-            if mask.sum() == 0:
+            idx_block = torch.nonzero(mask, as_tuple=False).squeeze(1)
+            if idx_block.numel() == 0:
                 print("No hay puntos en el bloque temporal")
                 block_loss = torch.tensor(0.0, device=device)
             else:
-                x_block = x_phys[mask]
-                y_block = y_phys[mask]
-                t_block = t_phys[mask]
+                # Submuestreo para limitar uso de memoria
+                if idx_block.numel() > MAX_BLOCK_POINTS:
+                    perm = torch.randperm(idx_block.numel(), device=device)
+                    idx_block = idx_block[perm[:MAX_BLOCK_POINTS]]
+
+                x_block = x_phys[idx_block]
+                y_block = y_phys[idx_block]
+                t_block = t_phys[idx_block]
 
                 # Predicción de la red
                 SIR_pred = self.forward(x_block, y_block, t_block)
@@ -358,6 +273,9 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
             R_init = torch.zeros_like(I_init)
 
             print(f"[Epoch {epoch}] Sampleo adaptativo realizado.")
+            # Liberar caché de CUDA para reducir fragmentación
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
 
         data = {
             'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
@@ -376,7 +294,7 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         temporal_weights = temporal_weights / (temporal_weights.mean() + 1e-12)
 
         # Actualización de pesos (usar el grafo antes del step)
-        if epoch % 100 == 0:
+        if epoch % 1000 == 0:
             model.w_ic, model.w_bc, model.w_pde = model.update_loss_weights(loss_ic, loss_bc, loss_phys)
             print(f"[Epoch {epoch}] Pesos actualizados: w_pde = {model.w_pde}, w_ic = {model.w_ic}, w_bc = {model.w_bc}")
 
