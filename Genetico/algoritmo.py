@@ -116,7 +116,8 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
 
 ############################## ALGORITMO GENÉTICO #########################################################
 
-def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, archivo_preentrenado=None, num_steps=10000, batch_size=10):
+def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, 
+                      archivo_preentrenado=None, generacion_preentrenada=0, num_steps=10000, batch_size=10):
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
     
     # Obtener el task_id del SGE
@@ -133,7 +134,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
         resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, num_steps=num_steps, batch_size=batch_size)
 
-    mutation_rate = 0.3
+    mutation_rate = 0.3 * 0.99**generacion_preentrenada
 
     for i, individuo in enumerate(resultados, 1):
             print(
