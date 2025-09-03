@@ -3,6 +3,7 @@ import torch.nn as nn # type: ignore
 import torch.optim as optim # type: ignore
 import numpy as np # type: ignore
 import copy
+import os
 
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -210,9 +211,21 @@ class FireSpread_PINN(nn.Module):
 ############################## ENTRENAMIENTO ###############################################
 
 # Función para entrenar la PINN con ecuaciones de propagación de fuego
-def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10):
+def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10, checkpoint_path=None):
     model = FireSpread_PINN().to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
+
+    # Cargando checkpoint
+    best_loss = float("inf")
+    start_epoch = 0
+
+    if checkpoint_path is not None and os.path.exists(checkpoint_path):
+        checkpoint = torch.load(checkpoint_path)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        best_loss = checkpoint.get('best_loss', float('inf'))
+        start_epoch = checkpoint.get('epoch', 0) + 1
+        print(f"🔄 Reanudando entrenamiento desde {checkpoint_path}, epoch {start_epoch}")
 
     # Genera datos de entrenamiento
     N_interior = 40000  # Puntos adentro del dominio
@@ -247,7 +260,7 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
     x_boundary = domain_size*torch.rand(N_boundary, 1, device=device) # x en (0, 1)
     y_boundary = domain_size*torch.rand(N_boundary, 1, device=device) # y en (0, 1)
     t_boundary = temporal_domain*torch.rand(N_boundary, 1, device=device) # t en (0, 1)
-
+    
     loss_phys_list, loss_bc_list, loss_ic_list = [], [], []
 
     best_loss = float('inf')
@@ -257,7 +270,7 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
 
     print(f"Entrenando PINNs con D = {D_I}, beta = {beta_val}, gamma = {gamma_val}")
 
-    for epoch in range(epochs_adam):
+    for epoch in range(start_epoch, epochs_adam):
         if epoch % 500 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
             x_interior, y_interior, t_interior = model.sample_by_nonlinearity(N_interior)
             x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
@@ -313,6 +326,8 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         # if epoch % 100 == 0 o epoch == epochs_adam - 1:
         print(f"Adam Época {epoch} | Loss: {total_loss.item()} | PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | BC Loss: {loss_bc.item()}")
 
+        last_epoch = epoch
+
     np.save("loss_phys.npy", np.array(loss_phys_list))
     np.save("loss_ic.npy", np.array(loss_ic_list))
     np.save("loss_bc.npy", np.array(loss_bc_list))
@@ -322,4 +337,4 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         model.load_state_dict(best_model_state)
         model.eval()
 
-    return model, best_loss
+    return model, optimizer, best_loss, last_epoch

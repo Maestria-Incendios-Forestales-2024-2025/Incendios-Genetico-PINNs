@@ -27,7 +27,7 @@ start_time = torch.cuda.Event(enable_timing=True)
 end_time = torch.cuda.Event(enable_timing=True)
 
 start_time.record()
-model, best_loss = train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=epochs_adam)
+model, optimizer, best_loss, last_epoch = train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=epochs_adam)
 end_time.record()
 
 # Sincronizar para asegurar medición correcta
@@ -39,6 +39,11 @@ print(f"Training time: {training_time:.2f} seconds")
 
 ############################## GUARDADO DEL MODELO ENTRENADO ###############################################
 
-torch.save(model.state_dict(), f"adaptive_pinns_DI{D_I}_beta{beta_val}.pth")
+torch.save({
+    'model_state_dict': model.state_dict(),
+    'optimizer_state_dict': optimizer.state_dict(),
+    'best_loss': best_loss,
+    'epoch': last_epoch
+}, f"adaptive_pinns_DI{D_I}_beta{beta_val}.pth")
 
 
