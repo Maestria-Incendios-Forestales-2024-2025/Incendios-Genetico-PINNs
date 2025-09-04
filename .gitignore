@@ -3,6 +3,7 @@
 *.sh
 *.png
 *.pth
+*.o
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

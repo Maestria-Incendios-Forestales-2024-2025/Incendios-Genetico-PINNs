@@ -126,8 +126,10 @@ S_batch = cp.where(vegetacion <= 2, 0, S_batch)  # Celdas no vegetadas son susce
 print(f'Se cumple la condición de Courant para el término advectivo: {courant_batch(dt/2, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
 
 # Coordenadas del punto de ignición
-x_ignicion = 400
-y_ignicion = 600 
+x_ignicion = cp.array([1300, 620, 1130])
+y_ignicion = cp.array([150, 280, 300])
+# x_ignicion = 400
+# y_ignicion = 600
 
 S_batch[:, y_ignicion, x_ignicion] = 0
 I_batch[:, y_ignicion, x_ignicion] = 1
