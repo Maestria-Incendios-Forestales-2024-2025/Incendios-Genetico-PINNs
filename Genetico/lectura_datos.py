@@ -25,7 +25,6 @@ def leer_incendio_referencia(ruta):
             mapa_incendio_referencia = mapa_incendio_referencia[0]
     else:
         raise ValueError(f'Extensión no reconocida: {extension}')
-    # return cp.flipud(mapa_incendio_referencia)
     return mapa_incendio_referencia
     
 ############################## CALCULO A PARTIR DE MAPAS ###############################################
@@ -139,7 +138,7 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
     
 ############################## GUARDADO DE RESULTADOS ###############################################
 
-def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5):
+def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, ajustar_beta_gamma=True):
     """
     Guarda resultados en un archivo CSV.
     
@@ -154,11 +153,14 @@ def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5):
     csv_filename = os.path.join(resultados_dir, f'resultados_generacion_{gen+1}.csv')
     
     # Definir nombres de columnas dinámicamente
-    fieldnames = ['D', 'A', 'B', 'x', 'y'] \
-               + [f'beta_{i}' for i in range(1, n_betas+1)] \
-               + [f'gamma_{i}' for i in range(1, n_gammas+1)] \
-               + ['fitness']
-    
+    if ajustar_beta_gamma:
+        fieldnames = ['D', 'A', 'B', 'x', 'y'] \
+                   + [f'beta_{i}' for i in range(1, n_betas+1)] \
+                   + [f'gamma_{i}' for i in range(1, n_gammas+1)] \
+                   + ['fitness']
+    else:
+        fieldnames = ['D', 'A', 'B', 'x', 'y'] + ['fitness']
+
     with open(csv_filename, 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
@@ -173,13 +175,14 @@ def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5):
                 'fitness': resultado['fitness'],
             }
             
-            # Expandir betas
-            for i, beta in enumerate(resultado['betas'], start=1):
-                row[f'beta_{i}'] = beta
+            if ajustar_beta_gamma:
+                # Expandir betas
+                for i, beta in enumerate(resultado['betas'], start=1):
+                    row[f'beta_{i}'] = beta
             
-            # Expandir gammas
-            for i, gamma in enumerate(resultado['gammas'], start=1):
-                row[f'gamma_{i}'] = gamma
+                # Expandir gammas
+                for i, gamma in enumerate(resultado['gammas'], start=1):
+                    row[f'gamma_{i}'] = gamma
             
             writer.writerow(row)
     

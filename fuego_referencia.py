@@ -126,8 +126,8 @@ S_batch = cp.where(vegetacion <= 2, 0, S_batch)  # Celdas no vegetadas son susce
 print(f'Se cumple la condición de Courant para el término advectivo: {courant_batch(dt/2, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
 
 # Coordenadas del punto de ignición
-x_ignicion = cp.array([1300, 620, 1130])
-y_ignicion = cp.array([150, 280, 300])
+x_ignicion = cp.array([400])
+y_ignicion = cp.array([600])
 # x_ignicion = 400
 # y_ignicion = 600
 
@@ -213,7 +213,7 @@ for t in range(num_steps):
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-cp.save("R_final.npy", R_new_batch)
+cp.save("R_referencia_1.npy", R_new_batch)
 
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")
