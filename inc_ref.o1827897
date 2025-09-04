@@ -1,0 +1,12 @@
+Allocated GPU(s) with id(s):  0
+Setting CUDA_VISIBLE_DEVICES=0
+Setting NV_GPU=0
+DeviceID: 0
+Traceback (most recent call last):
+  File "fuego_referencia.py", line 27, in <module>
+    datos = [leer_asc(mapa) for mapa in ruta_mapas]
+  File "fuego_referencia.py", line 27, in <listcomp>
+    datos = [leer_asc(mapa) for mapa in ruta_mapas]
+  File "fuego_referencia.py", line 17, in leer_asc
+    with open(ruta, 'r') as f:
+FileNotFoundError: [Errno 2] No such file or directory: 'c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/ang_wind.asc'
