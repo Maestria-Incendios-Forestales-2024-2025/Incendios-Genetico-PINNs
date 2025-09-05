@@ -51,7 +51,7 @@ ajustar_beta_gamma = False  # Cambia a False para usar beta/gamma fijos
 beta_fijo = [1.0, 1.0, 1.0, 1.0, 1.0]  # Ejemplo de valores fijos
 gamma_fijo = [0.5, 0.5, 0.5, 0.5, 0.5]
 
-resultados = genetic_algorithm(tamano_poblacion=10000, generaciones=2, limite_parametros=limite_parametros,
+resultados = genetic_algorithm(tamano_poblacion=10, generaciones=2, limite_parametros=limite_parametros,
                                ruta_incendio_referencia=ruta_incendio_referencia, num_steps=500, batch_size=5,
                                ajustar_beta_gamma=ajustar_beta_gamma, beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
 

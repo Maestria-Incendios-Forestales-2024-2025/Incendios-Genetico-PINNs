@@ -100,25 +100,28 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
                 A, B = validate_courant_and_adjust(A, B)
                 x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
                 betas, gammas = validate_beta_gamma(betas, gammas)
-            parametros_validados.append((D, A, B, x, y, betas, gammas))
+                parametros_validados.append((D, A, B, x, y, betas, gammas))
         else: 
             for D, A, B, x, y in parametros_batch:
                 A, B = validate_courant_and_adjust(A, B)
                 x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
-            parametros_validados.append((D, A, B, x, y))
+                parametros_validados.append((D, A, B, x, y))
+
+        for individuo in parametros_validados:
+            print(individuo)
 
         fitness_values = aptitud_batch(parametros_validados, celdas_quemadas_referencia, num_steps, 
                                        ajustar_beta_gamma=ajustar_beta_gamma, beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
 
         if ajustar_beta_gamma:
-            for params, fitness in zip(parametros_validados, fitness_values):
+            for j, (params, fitness) in enumerate(zip(parametros_validados, fitness_values)):
                 D, A, B, x, y, betas, gammas = params
                 resultados.append({
                     "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness,
                     "betas": betas, "gammas": gammas
                 })
         else: 
-            for params, fitness in zip(parametros_validados, fitness_values):
+            for j, (params, fitness) in enumerate(zip(parametros_validados, fitness_values)):
                 D, A, B, x, y = params
                 resultados.append({
                     "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness 
@@ -143,6 +146,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         resultados = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros)
     else:
         combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros, ajustar_beta_gamma=ajustar_beta_gamma)
+        print(combinaciones)
         resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros,
                                               num_steps=num_steps, batch_size=batch_size, 
                                               ajustar_beta_gamma=ajustar_beta_gamma, 
@@ -210,7 +214,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
                     f'\t fitness={individuo["fitness"]:.4f}'
                 )
 
-        guardar_resultados(resultados, resultados_dir, gen+generacion_preentrenada)
+        guardar_resultados(resultados, resultados_dir, gen+generacion_preentrenada, ajustar_beta_gamma=ajustar_beta_gamma)
 
     print(f'Resultados guardados en: {resultados_dir}')
     print(f'Task ID: {task_id}')
