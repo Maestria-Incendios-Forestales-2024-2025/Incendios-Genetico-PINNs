@@ -40,7 +40,7 @@ limite_beta = [(0.1, 2.0)] * 5  # Límites para beta_veg
 limite_gamma = [(0.1, 0.9)] * 5  # Límites para gamma
 
 # Población aleatoria inicial (D, A, B, x, y)
-limite_parametros = [(0.01, 100.), (0.0, A_max * cota), (0.0, B_max * cota), (300, 720), (400, 800)]
+limite_parametros = [(0.01, 100.0), (0.0, A_max * cota), (0.0, B_max * cota), (300, 720), (400, 800)]
 
 # Sincronizar antes de empezar a medir el tiempo
 cp.cuda.Stream.null.synchronize()
@@ -48,10 +48,10 @@ start_time = time.time()
 
 # Ejecutar el GA con procesamiento en batch
 ajustar_beta_gamma = False  # Cambia a False para usar beta/gamma fijos
-beta_fijo = [1.0, 1.0, 1.0, 1.0, 1.0]  # Ejemplo de valores fijos
-gamma_fijo = [0.5, 0.5, 0.5, 0.5, 0.5]
+beta_fijo = [0.91, 0.72, 1.38, 1.94, 0.75]  # Ejemplo de valores fijos
+gamma_fijo = [0.5, 0.38, 0.84, 0.45, 0.14]
 
-resultados = genetic_algorithm(tamano_poblacion=10, generaciones=2, limite_parametros=limite_parametros,
+resultados = genetic_algorithm(tamano_poblacion=10000, generaciones=10, limite_parametros=limite_parametros,
                                ruta_incendio_referencia=ruta_incendio_referencia, num_steps=500, batch_size=5,
                                ajustar_beta_gamma=ajustar_beta_gamma, beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
 
@@ -60,4 +60,3 @@ cp.cuda.Stream.null.synchronize()
 end_time = time.time()
 
 print(f"Tiempo de ejecución en GPU: {end_time - start_time} segundos")
-
