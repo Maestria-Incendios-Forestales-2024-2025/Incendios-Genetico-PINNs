@@ -3,7 +3,7 @@ import random
 
 ############################## ARMADO DE POBLACIÓN INICIAL ###############################################
 
-def poblacion_inicial(tamano_poblacion, limite_parametros):
+def poblacion_inicial(tamano_poblacion, limite_parametros, ajustar_beta_gamma=True):
     """
     Genera población inicial con parámetros básicos + parámetros de vegetación
     totalmente en GPU.
@@ -23,11 +23,12 @@ def poblacion_inicial(tamano_poblacion, limite_parametros):
         for i, (low, high) in enumerate(limite_parametros):
             valor = cp.random.uniform(low, high, dtype=cp.float32)
 
-            # Reglas para gamma <= beta
-            if 10 <= i <= 14:  # gamma
-                beta_val = individuo[i - 5]
-                while valor > beta_val:
-                    valor = cp.random.uniform(low, high, dtype=cp.float32)
+            if ajustar_beta_gamma:
+                # Reglas para gamma <= beta
+                if 10 <= i <= 14:  # gamma
+                    beta_val = individuo[i - 5]
+                    while valor > beta_val:
+                        valor = cp.random.uniform(low, high, dtype=cp.float32)
 
             individuo[i] = valor
 
@@ -37,7 +38,7 @@ def poblacion_inicial(tamano_poblacion, limite_parametros):
 
 ############################## SELECCIÓN DE TORNEO ###############################################
 
-def tournament_selection(resultados, tournament_size=3):
+def tournament_selection(resultados, tournament_size=3, ajustar_beta_gamma=True):
     """Selecciona el individuo con mejor fitness dentro de un subconjunto aleatorio."""
     selected = random.sample(resultados, tournament_size)
     best_individual = min(selected, key=lambda x: x["fitness"])
@@ -45,15 +46,15 @@ def tournament_selection(resultados, tournament_size=3):
     # Extraer parámetros básicos
     D, A, B, x, y = best_individual["D"], best_individual["A"], best_individual["B"], best_individual["x"], best_individual["y"]
     
-    # Extraer parámetros de vegetación (si existen)
-    betas = best_individual.get('betas', cp.array([], dtype=cp.float32))
-    gammas = best_individual.get('gammas', cp.array([], dtype=cp.float32))
+    all_params = cp.array([D, A, B, x, y], dtype=cp.float32)
+
+    if ajustar_beta_gamma:
+        # Extraer parámetros de vegetación (si existen)
+        betas = best_individual.get('betas', cp.array([], dtype=cp.float32))
+        gammas = best_individual.get('gammas', cp.array([], dtype=cp.float32))
     
-    # Crear array plano concatenando todos los parámetros
-    basic_params = cp.array([D, A, B, x, y], dtype=cp.float32)
-    
-    # Concatenar todos los parámetros en un solo array
-    all_params = cp.concatenate([basic_params, cp.asarray(betas, dtype=cp.float32), cp.asarray(gammas, dtype=cp.float32)])
+        # Concatenar todos los parámetros en un solo array
+        all_params = cp.concatenate([all_params, cp.asarray(betas, dtype=cp.float32), cp.asarray(gammas, dtype=cp.float32)])
     
     return all_params
 

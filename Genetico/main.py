@@ -3,6 +3,7 @@ import time
 from config import d, dt, cota
 from lectura_datos import preprocesar_datos
 from algoritmo import genetic_algorithm
+import socket
 
 print(cp.cuda.runtime.getDeviceProperties(0)['name'])
 print(cp.__version__)
@@ -19,8 +20,14 @@ h_dy_mapa = datos["h_dy"]
 
 ############################## INCENDIO DE REFERENCIA ####################################################
 
-# ruta_incendio_referencia = 'c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/area_quemada_SM.asc'
-ruta_incendio_referencia = 'c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/R_referencia.npy'
+hostname = socket.gethostname()
+
+if "rocks7frontend" in hostname or "compute" in hostname:
+    # Cluster
+    ruta_incendio_referencia = "/home/lucas.becerra/Incendios-Genetico-PINNs/R_referencia_1.npy"
+else:
+    # Local
+    ruta_incendio_referencia = 'c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/R_referencia_1.npy'
 
 ############################## CONDICIÓN DE COURANT PARA LOS TÉRMINOS DIFUSIVOS Y ADVECTIVOS ############
 
@@ -33,22 +40,23 @@ limite_beta = [(0.1, 2.0)] * 5  # Límites para beta_veg
 limite_gamma = [(0.1, 0.9)] * 5  # Límites para gamma
 
 # Población aleatoria inicial (D, A, B, x, y)
-limite_parametros = [(0.01, 100.), (0.0, A_max * cota), (0.0, B_max * cota), (300, 720), (400, 800)] + limite_beta + limite_gamma
+limite_parametros = [(0.01, 100.0), (0.0, A_max * cota), (0.0, B_max * cota), (300, 720), (400, 800)]
 
 # Sincronizar antes de empezar a medir el tiempo
 cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 # Ejecutar el GA con procesamiento en batch
-resultados = genetic_algorithm(tamano_poblacion=10000, generaciones=2, limite_parametros=limite_parametros,
-                               ruta_incendio_referencia=ruta_incendio_referencia, 
-                              archivo_preentrenado='resultados/task_1816655/resultados_generacion_10.csv', 
-                               num_steps=500,
-                               batch_size=5)
+ajustar_beta_gamma = False  # Cambia a False para usar beta/gamma fijos
+beta_fijo = [0.91, 0.72, 1.38, 1.94, 0.75]  # Ejemplo de valores fijos
+gamma_fijo = [0.5, 0.38, 0.84, 0.45, 0.14]
+
+resultados = genetic_algorithm(tamano_poblacion=10000, generaciones=10, limite_parametros=limite_parametros,
+                               ruta_incendio_referencia=ruta_incendio_referencia, num_steps=500, batch_size=5,
+                               ajustar_beta_gamma=ajustar_beta_gamma, beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
 
 # Sincronizar después de completar la ejecución
 cp.cuda.Stream.null.synchronize()
 end_time = time.time()
 
 print(f"Tiempo de ejecución en GPU: {end_time - start_time} segundos")
-

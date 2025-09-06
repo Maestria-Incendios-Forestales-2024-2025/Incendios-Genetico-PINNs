@@ -60,7 +60,8 @@ def validate_beta_gamma(betas, gammas):
 
 ############################## PROCESAMIENTO EN BATCH ###############################################
 
-def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_parametros, num_steps=10000, batch_size=10):
+def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_parametros, num_steps=10000, batch_size=10, 
+                             ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
     """
     Procesa una población en batches para aprovechar el paralelismo.
     
@@ -75,119 +76,145 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
 
     incendio_referencia = leer_incendio_referencia(ruta_incendio_referencia)
     celdas_quemadas_referencia = cp.where(incendio_referencia > 0.001, 1, 0)
-    
+
     for i in range(0, len(poblacion), batch_size):
         batch = poblacion[i:i+batch_size]
-        
+
         print(f'Procesando batch {i//batch_size + 1} de {len(poblacion) // batch_size}...')
-        
-        # Preparar parámetros para el batch
+
         parametros_batch = []
         for individuo in batch:
             D, A, B, x, y = individuo[:5]
-            betas = individuo[5:10]  # beta_veg
-            gammas = individuo[10:15]  # gamma
-            
             D, A, B, x, y = D.item(), A.item(), B.item(), int(x.item()), int(y.item())
+            if ajustar_beta_gamma:
+                betas = individuo[5:10]  # beta_veg
+                gammas = individuo[10:15]  # gamma
+                parametros_batch.append((D, A, B, x, y, betas, gammas))
+            else:
+                parametros_batch.append((D, A, B, x, y))
 
-            parametros_batch.append((D, A, B, x, y, betas, gammas))
-
-        # Validar parámetros
         parametros_validados = []
-        for D, A, B, x, y, betas, gammas in parametros_batch:
-            # Validar y ajustar parámetros
-            A, B = validate_courant_and_adjust(A, B)
-            x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
-            betas, gammas = validate_beta_gamma(betas, gammas)
-            parametros_validados.append((D, A, B, x, y, betas, gammas))
 
-        # Calcular fitness en batch
-        fitness_values = aptitud_batch(parametros_validados, celdas_quemadas_referencia, num_steps)
-        
-        # Agregar resultados
-        for j, (params, fitness) in enumerate(zip(parametros_validados, fitness_values)):
-            D, A, B, x, y, betas, gammas = params
-            resultados.append({
-                "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness,
-                "betas": betas, "gammas": gammas
-            })
-    
+        if ajustar_beta_gamma:
+            for D, A, B, x, y, betas, gammas in parametros_batch:
+                A, B = validate_courant_and_adjust(A, B)
+                x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
+                betas, gammas = validate_beta_gamma(betas, gammas)
+                parametros_validados.append((D, A, B, x, y, betas, gammas))
+        else: 
+            for D, A, B, x, y in parametros_batch:
+                A, B = validate_courant_and_adjust(A, B)
+                x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
+                parametros_validados.append((D, A, B, x, y))
+
+        for individuo in parametros_validados:
+            print(individuo)
+
+        fitness_values = aptitud_batch(parametros_validados, celdas_quemadas_referencia, num_steps, 
+                                       ajustar_beta_gamma=ajustar_beta_gamma, beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
+
+        if ajustar_beta_gamma:
+            for j, (params, fitness) in enumerate(zip(parametros_validados, fitness_values)):
+                D, A, B, x, y, betas, gammas = params
+                resultados.append({
+                    "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness,
+                    "betas": betas, "gammas": gammas
+                })
+        else: 
+            for j, (params, fitness) in enumerate(zip(parametros_validados, fitness_values)):
+                D, A, B, x, y = params
+                resultados.append({
+                    "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness 
+                })
+
     return resultados
 
 ############################## ALGORITMO GENÉTICO #########################################################
 
-def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, 
-                      archivo_preentrenado=None, generacion_preentrenada=0, num_steps=10000, batch_size=10):
+def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia,
+                      archivo_preentrenado=None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
+                      ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
+    
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
-    
-    # Obtener el task_id del SGE
+
     task_id = os.environ.get('JOB_ID', 'default')
-    
-    # Crear la carpeta de resultados con el task_id
     resultados_dir = f'resultados/task_{task_id}'
     os.makedirs(resultados_dir, exist_ok=True)
 
-    # Cargar población inicial (preentrenada o nueva)
+    # Si hay una población preentrenada la carga, sino se genera una nueva población inicial
     if archivo_preentrenado:
         resultados = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros)
     else:
-        combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
-        resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, num_steps=num_steps, batch_size=batch_size)
-
+        combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros, ajustar_beta_gamma=ajustar_beta_gamma)
+        print(combinaciones)
+        resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros,
+                                              num_steps=num_steps, batch_size=batch_size, 
+                                              ajustar_beta_gamma=ajustar_beta_gamma, 
+                                              beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
+ 
     mutation_rate = 0.3 * 0.99**generacion_preentrenada
 
     for i, individuo in enumerate(resultados, 1):
+        if ajustar_beta_gamma:
             print(
                 f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
                 f'\t beta={individuo["betas"]}, \n'
                 f'\t gamma={individuo["gammas"]}, \n'
                 f'\t fitness={individuo["fitness"]:.4f}'
             )
+        else:
+            print(
+                f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
+                f'\t fitness={individuo["fitness"]:.4f}'
+            )
 
-    # Guardar los resultados de la generación en la carpeta específica del task_id
-    guardar_resultados(resultados, resultados_dir, -1+generacion_preentrenada)
+    guardar_resultados(resultados, resultados_dir, -1+generacion_preentrenada, ajustar_beta_gamma=ajustar_beta_gamma)
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 
     for gen in range(generaciones):
         print(f'Iniciando generación {gen+1}...')
         new_population = []
-
-        # Elitismo
         elite = min(resultados, key=lambda x: x["fitness"])
 
-        for _ in range(tamano_poblacion // 2): 
-            parent1 = tournament_selection(resultados) # Selecciona 2 padres
-            parent2 = tournament_selection(resultados)
-            child1, child2 = crossover(parent1, parent2) # Se hace un crossover entre los padres y se generan 2 hijos
-            child1 = mutate(child1, mutation_rate, limite_parametros) # A esos hijos se les realiza una mutación
+        for _ in range(tamano_poblacion // 2):
+            parent1 = tournament_selection(resultados, ajustar_beta_gamma=ajustar_beta_gamma)
+            parent2 = tournament_selection(resultados, ajustar_beta_gamma=ajustar_beta_gamma)
+            child1, child2 = crossover(parent1, parent2)
+            child1 = mutate(child1, mutation_rate, limite_parametros)
             child2 = mutate(child2, mutation_rate, limite_parametros)
-            new_population.extend([child1, child2]) # Estos hijos pasan a formar parte de la nueva población
+            new_population.extend([child1, child2])
 
         population = cp.array(new_population)
 
-        # Procesar nueva población en batch
         print(f"Procesando generación {gen+1} en batch...")
-        resultados = procesar_poblacion_batch(population, ruta_incendio_referencia, limite_parametros, num_steps=num_steps, batch_size=batch_size)
+        resultados = procesar_poblacion_batch(population, ruta_incendio_referencia, limite_parametros,
+                                              num_steps=num_steps, batch_size=batch_size,
+                                              ajustar_beta_gamma=ajustar_beta_gamma, 
+                                              beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
 
         peor_idx = max(range(len(resultados)), key=lambda i: resultados[i]["fitness"])
-        resultados[peor_idx] = elite  # Mantener el mejor individuo de la generación anterior
+        resultados[peor_idx] = elite
 
         best_fitness = min(resultados, key=lambda x: x["fitness"])["fitness"]
         print(f'Generación {gen+1}: Mejor fitness = {best_fitness}')
 
-        # Opcional: reducir la tasa de mutación con el tiempo
         mutation_rate *= 0.99
 
         for i, individuo in enumerate(resultados, 1):
-            print(
-                f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
-                f'\t beta={individuo["betas"]}, \n'
-                f'\t gamma={individuo["gammas"]}, \n'
-                f'\t fitness={individuo["fitness"]:.4f}'
-            )
+            if ajustar_beta_gamma:
+                print(
+                    f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
+                    f'\t beta={individuo["betas"]}, \n'
+                    f'\t gamma={individuo["gammas"]}, \n'
+                    f'\t fitness={individuo["fitness"]:.4f}'
+                )
+            else:
+                print(
+                    f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
+                    f'\t fitness={individuo["fitness"]:.4f}'
+                )
 
-        # Guardar los resultados de la generación en la carpeta específica del task_id
-        guardar_resultados(resultados, resultados_dir, gen+generacion_preentrenada)
+        guardar_resultados(resultados, resultados_dir, gen+generacion_preentrenada, ajustar_beta_gamma=ajustar_beta_gamma)
 
     print(f'Resultados guardados en: {resultados_dir}')
     print(f'Task ID: {task_id}')

@@ -28,7 +28,7 @@ ny, nx = datos["ny"], datos["nx"]
 
 ############################## FUNCIÓN PARA MAPEAR PARÁMETROS DE VEGETACIÓN ###############################################
 
-def crear_mapas_parametros_batch(parametros_batch, vegetacion):
+def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
     """
     Crea mapas de beta y gamma personalizados para cada simulación en el batch
     basados en los parámetros optimizados y el tipo de vegetación.
@@ -51,27 +51,30 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion):
     
     # Para cada simulación en el batch
     for i, params in enumerate(parametros_batch):
-        if len(params) >= 7:  # Verificar que tenemos los parámetros de vegetación
+        if ajustar_beta_gamma and len(params) >= 7:
             beta_params = params[5]  # Lista de betas por tipo de vegetación
             gamma_params = params[6]  # Lista de gammas por tipo de vegetación
+        else: 
+            beta_params = cp.array(beta_fijo, dtype=cp.float32) if beta_fijo is not None else cp.ones(5, dtype=cp.float32)
+            gamma_params = cp.array(gamma_fijo, dtype=cp.float32) if gamma_fijo is not None else cp.ones(5, dtype=cp.float32)
+
+        # Inicializar con valores por defecto
+        beta_map = cp.zeros_like(vegetacion, dtype=cp.float32)
+        gamma_map = cp.zeros_like(vegetacion, dtype=cp.float32)
             
-            # Inicializar con valores por defecto
-            beta_map = cp.zeros_like(vegetacion, dtype=cp.float32)
-            gamma_map = cp.zeros_like(vegetacion, dtype=cp.float32)
-            
-            # Mapear valores según tipo de vegetación
-            for j, veg_type in enumerate(veg_types):
-                veg_type = int(veg_type)
-                # Crear máscara para este tipo de vegetación
-                mask = (vegetacion == veg_type)
+        # Mapear valores según tipo de vegetación
+        for j, veg_type in enumerate(veg_types):
+            veg_type = int(veg_type)
+            # Crear máscara para este tipo de vegetación
+            mask = (vegetacion == veg_type)
                 
-                # Asignar valores si tenemos parámetros para este tipo
-                if j < len(beta_params) and j < len(gamma_params):
-                    beta_map = cp.where(mask, beta_params[j], beta_map)
-                    gamma_map = cp.where(mask, gamma_params[j], gamma_map)
+            # Asignar valores si tenemos parámetros para este tipo
+            if j < len(beta_params) and j < len(gamma_params):
+                beta_map = cp.where(mask, beta_params[j], beta_map)
+                gamma_map = cp.where(mask, gamma_params[j], gamma_map)
             
-            beta_batch[i] = beta_map
-            gamma_batch[i] = gamma_map
+        beta_batch[i] = beta_map
+        gamma_batch[i] = gamma_map
 
     sigma = (0, 10.0, 10.0)
 
@@ -83,7 +86,7 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion):
 
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS POR BATCH ###############################################
 
-def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
+def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
     """
     Calcula el fitness para múltiples combinaciones de parámetros en paralelo.
     
@@ -117,7 +120,8 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000):
     R_new_batch = cp.empty_like(R_batch)
     
     # Crear mapas de parámetros de vegetación personalizados
-    beta_batch, gamma_batch = crear_mapas_parametros_batch(parametros_batch, vegetacion)
+    beta_batch, gamma_batch = crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamma=ajustar_beta_gamma,
+                                                           beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
 
     # Crear arrays de parámetros D, A, B para cada simulación
     D_batch = cp.array([param[0] for param in parametros_batch], dtype=cp.float32)
