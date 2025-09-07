@@ -44,9 +44,14 @@ def tournament_selection(resultados, tournament_size=3, ajustar_beta_gamma=True,
 
     # Extraer betas y gammas si corresponde
     if ajustar_beta_gamma:
-        betas = best_individual.get('betas', cp.array([], dtype=cp.float32))
-        gammas = best_individual.get('gammas', cp.array([], dtype=cp.float32))
-        all_params = cp.concatenate([all_params, cp.asarray(betas, dtype=cp.float32), cp.asarray(gammas, dtype=cp.float32)])
+        if best_individual['betas'].size > 1:
+            betas = best_individual.get('betas', cp.array([], dtype=cp.float32))
+            gammas = best_individual.get('gammas', cp.array([], dtype=cp.float32))
+            all_params = cp.concatenate([all_params, cp.asarray(betas, dtype=cp.float32), cp.asarray(gammas, dtype=cp.float32)])
+        else:
+            betas = best_individual['betas']
+            gammas = best_individual['gammas']
+            all_params = cp.append(all_params, [betas, gammas])
     
     return all_params
 

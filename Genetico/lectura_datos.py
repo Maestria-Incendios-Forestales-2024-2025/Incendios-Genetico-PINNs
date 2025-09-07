@@ -182,14 +182,17 @@ def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, a
                 row['y'] = resultado['y']
             
             if ajustar_beta_gamma:
-                # Expandir betas
-                for i, beta in enumerate(resultado['betas'], start=1):
-                    row[f'beta_{i}'] = beta
+                if resultado['betas'].size > 1:
+                    # Expandir betas
+                    for i, beta in enumerate(resultado['betas'], start=1):
+                        row[f'beta_{i}'] = beta
             
-                # Expandir gammas
-                for i, gamma in enumerate(resultado['gammas'], start=1):
-                    row[f'gamma_{i}'] = gamma
-            
+                    # Expandir gammas
+                    for i, gamma in enumerate(resultado['gammas'], start=1):
+                        row[f'gamma_{i}'] = gamma
+                else:
+                    row['beta'] = resultado['betas']
+                    row['gamma'] = resultado['gammas']
             writer.writerow(row)
     
     print(f"✅ Resultados guardados en {csv_filename}")
