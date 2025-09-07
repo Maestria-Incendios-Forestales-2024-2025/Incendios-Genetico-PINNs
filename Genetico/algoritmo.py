@@ -61,7 +61,8 @@ def validate_beta_gamma(betas, gammas):
 ############################## PROCESAMIENTO EN BATCH ###############################################
 
 def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_parametros, num_steps=10000, batch_size=10, 
-                             ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
+                             ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True,
+                             ignicion_fija_x=None, ignicion_fija_y=None):
     """
     Procesa una población en batches para aprovechar el paralelismo.
     
@@ -84,44 +85,62 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
 
         parametros_batch = []
         for individuo in batch:
-            D, A, B, x, y = individuo[:5]
-            D, A, B, x, y = D.item(), A.item(), B.item(), int(x.item()), int(y.item())
-            if ajustar_beta_gamma:
-                betas = individuo[5:10]  # beta_veg
-                gammas = individuo[10:15]  # gamma
+            D, A, B = individuo[:3]
+            D, A, B = D.item(), A.item(), B.item()
+
+            if ajustar_beta_gamma and ajustar_ignicion:         # Exp2
+                x, y = int(individuo[3].item()), int(individuo[4].item())
+                betas = individuo[5]  # beta_veg
+                gammas = individuo[6]  # gamma
                 parametros_batch.append((D, A, B, x, y, betas, gammas))
-            else:
+            elif ajustar_beta_gamma and not ajustar_ignicion:   # Exp3
+                betas = individuo[3:8]
+                gammas = individuo[8:13]
+                parametros_batch.append((D, A, B, betas, gammas))
+            else:                                               # Exp1
+                x, y = int(individuo[3].item()), int(individuo[4].item())
                 parametros_batch.append((D, A, B, x, y))
 
         parametros_validados = []
 
-        if ajustar_beta_gamma:
+        if ajustar_beta_gamma and ajustar_ignicion:             # Exp2
             for D, A, B, x, y, betas, gammas in parametros_batch:
                 A, B = validate_courant_and_adjust(A, B)
                 x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
                 betas, gammas = validate_beta_gamma(betas, gammas)
                 parametros_validados.append((D, A, B, x, y, betas, gammas))
-        else: 
+        elif ajustar_beta_gamma and not ajustar_ignicion:       # Exp3 
+            for D, A, B, betas, gammas in parametros_batch:
+                A, B = validate_courant_and_adjust(A, B)
+                betas, gammas = validate_beta_gamma(betas, gammas)
+                parametros_validados.append((D, A, B, betas, gammas))
+        else:                                                   # Exp1
             for D, A, B, x, y in parametros_batch:
                 A, B = validate_courant_and_adjust(A, B)
                 x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
                 parametros_validados.append((D, A, B, x, y))
 
-        for individuo in parametros_validados:
-            print(individuo)
-
         fitness_values = aptitud_batch(parametros_validados, celdas_quemadas_referencia, num_steps, 
-                                       ajustar_beta_gamma=ajustar_beta_gamma, beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
+                                       ajustar_beta_gamma=ajustar_beta_gamma, beta_fijo=beta_fijo, gamma_fijo=gamma_fijo, 
+                                       ajustar_ignicion=ajustar_ignicion, ignicion_fija_x=ignicion_fija_x, 
+                                       ignicion_fija_y=ignicion_fija_y)
 
-        if ajustar_beta_gamma:
-            for j, (params, fitness) in enumerate(zip(parametros_validados, fitness_values)):
+        if ajustar_beta_gamma and ajustar_ignicion:              # Exp2
+            for params, fitness in zip(parametros_validados, fitness_values):
                 D, A, B, x, y, betas, gammas = params
                 resultados.append({
                     "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness,
                     "betas": betas, "gammas": gammas
                 })
-        else: 
-            for j, (params, fitness) in enumerate(zip(parametros_validados, fitness_values)):
+        elif ajustar_beta_gamma and not ajustar_ignicion:        # Exp3
+            for params, fitness in zip(parametros_validados, fitness_values):
+                D, A, B, betas, gammas = params
+                resultados.append({
+                    "D": D, "A": A, "B": B, "fitness": fitness,
+                    "betas": betas, "gammas": gammas
+                })
+        else:                                                     # Exp1
+            for params, fitness in zip(parametros_validados, fitness_values):
                 D, A, B, x, y = params
                 resultados.append({
                     "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness 
@@ -133,7 +152,7 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
 
 def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia,
                       archivo_preentrenado=None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
-                      ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
+                      ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True, ignicion_fija_x=None, ignicion_fija_y=None):
     
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
 
@@ -145,19 +164,26 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
     if archivo_preentrenado:
         resultados = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros)
     else:
-        combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros, ajustar_beta_gamma=ajustar_beta_gamma)
-        print(combinaciones)
+        combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
         resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros,
                                               num_steps=num_steps, batch_size=batch_size, 
                                               ajustar_beta_gamma=ajustar_beta_gamma, 
-                                              beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
+                                              beta_fijo=beta_fijo, gamma_fijo=gamma_fijo, ajustar_ignicion=ajustar_ignicion,
+                                              ignicion_fija_x=ignicion_fija_x, ignicion_fija_y=ignicion_fija_y)
  
     mutation_rate = 0.3 * 0.99**generacion_preentrenada
 
     for i, individuo in enumerate(resultados, 1):
-        if ajustar_beta_gamma:
+        if ajustar_beta_gamma and ajustar_ignicion:
             print(
                 f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
+                f'\t beta={individuo["betas"]}, \n'
+                f'\t gamma={individuo["gammas"]}, \n'
+                f'\t fitness={individuo["fitness"]:.4f}'
+            )
+        if ajustar_beta_gamma and not ajustar_ignicion:
+            print(
+                f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, \n'
                 f'\t beta={individuo["betas"]}, \n'
                 f'\t gamma={individuo["gammas"]}, \n'
                 f'\t fitness={individuo["fitness"]:.4f}'
@@ -201,9 +227,16 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         mutation_rate *= 0.99
 
         for i, individuo in enumerate(resultados, 1):
-            if ajustar_beta_gamma:
+            if ajustar_beta_gamma and ajustar_ignicion:
                 print(
                     f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
+                    f'\t beta={individuo["betas"]}, \n'
+                    f'\t gamma={individuo["gammas"]}, \n'
+                    f'\t fitness={individuo["fitness"]:.4f}'
+                )
+            if ajustar_beta_gamma and not ajustar_ignicion:
+                print(
+                    f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, \n'
                     f'\t beta={individuo["betas"]}, \n'
                     f'\t gamma={individuo["gammas"]}, \n'
                     f'\t fitness={individuo["fitness"]:.4f}'
@@ -214,7 +247,8 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
                     f'\t fitness={individuo["fitness"]:.4f}'
                 )
 
-        guardar_resultados(resultados, resultados_dir, gen+generacion_preentrenada, ajustar_beta_gamma=ajustar_beta_gamma)
+        guardar_resultados(resultados, resultados_dir, gen+generacion_preentrenada, 
+                           ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
 
     print(f'Resultados guardados en: {resultados_dir}')
     print(f'Task ID: {task_id}')
