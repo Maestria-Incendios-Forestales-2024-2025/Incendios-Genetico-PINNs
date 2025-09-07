@@ -4,6 +4,7 @@ from config import d, dt, cota
 from lectura_datos import preprocesar_datos
 from algoritmo import genetic_algorithm
 import socket, os
+import argparse
 
 print(cp.cuda.runtime.getDeviceProperties(0)['name'])
 print(cp.__version__)
@@ -20,8 +21,11 @@ h_dy_mapa = datos["h_dy"]
 
 ############################## INCENDIO DE REFERENCIA ####################################################
 
-# Leo la variable de entorno EXP (por defecto 1 si no está definida)
-exp = int(os.environ.get("EXP", 1))
+# Obtengo la variable por línea de comando
+parser = argparse.ArgumentParser()
+parser.add_argument("--exp", type=int, default=1, help="Número de experimento")
+args = parser.parse_args()
+exp = args.exp
 
 # Detecto dónde estoy corriendo
 hostname = socket.gethostname()
