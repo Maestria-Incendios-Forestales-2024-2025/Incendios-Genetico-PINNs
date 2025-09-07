@@ -93,7 +93,7 @@ elif exp == 3:
     limite_parametros = limite_parametros_base + limite_beta + limite_gamma
 
     ignicion_fija_x = [1130, 1300, 620]
-    ignicion_fija_y = [300, 150, 280]
+    ignicion_fija_y = [290, 150, 280]
 
 else:
     raise ValueError(f"Experimento {exp} no está definido")
