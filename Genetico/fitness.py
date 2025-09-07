@@ -59,7 +59,7 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamm
             gamma_val = params[6]  # un solo valor escalar
             beta_map = cp.full_like(vegetacion, beta_val, dtype=cp.float32)
             gamma_map = cp.full_like(vegetacion, gamma_val, dtype=cp.float32)
-        elif ajustar_beta_gamma and len(params) == 13: # Exp3
+        elif ajustar_beta_gamma and len(params) == 5: # Exp3
             beta_params = params[3]  # Lista de betas por tipo de vegetación
             gamma_params = params[4]  # Lista de gammas por tipo de vegetación
             

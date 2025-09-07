@@ -158,7 +158,7 @@ def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, a
                    + [f'gamma'] \
                    + ['fitness']
     elif ajustar_beta_gamma and not ajustar_ignicion:  # Exp3
-        fieldnames = ['D', 'A', 'B', 'x', 'y'] \
+        fieldnames = ['D', 'A', 'B'] \
                    + [f'beta_{i}' for i in range(1, n_betas+1)] \
                    + [f'gamma_{i}' for i in range(1, n_gammas+1)] \
                    + ['fitness']

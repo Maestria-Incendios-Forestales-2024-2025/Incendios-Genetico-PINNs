@@ -194,7 +194,8 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
                 f'\t fitness={individuo["fitness"]:.4f}'
             )
 
-    guardar_resultados(resultados, resultados_dir, -1+generacion_preentrenada, ajustar_beta_gamma=ajustar_beta_gamma)
+    guardar_resultados(resultados, resultados_dir, -1+generacion_preentrenada, 
+                       ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
     print(f'Generación 0: Mejor fitness = {min(resultados, key=lambda x: x["fitness"])["fitness"]}')
 
     for gen in range(generaciones):
@@ -203,8 +204,8 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         elite = min(resultados, key=lambda x: x["fitness"])
 
         for _ in range(tamano_poblacion // 2):
-            parent1 = tournament_selection(resultados, ajustar_beta_gamma=ajustar_beta_gamma)
-            parent2 = tournament_selection(resultados, ajustar_beta_gamma=ajustar_beta_gamma)
+            parent1 = tournament_selection(resultados, ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
+            parent2 = tournament_selection(resultados, ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
             child1, child2 = crossover(parent1, parent2)
             child1 = mutate(child1, mutation_rate, limite_parametros)
             child2 = mutate(child2, mutation_rate, limite_parametros)
@@ -216,7 +217,8 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         resultados = procesar_poblacion_batch(population, ruta_incendio_referencia, limite_parametros,
                                               num_steps=num_steps, batch_size=batch_size,
                                               ajustar_beta_gamma=ajustar_beta_gamma, 
-                                              beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
+                                              beta_fijo=beta_fijo, gamma_fijo=gamma_fijo, ajustar_ignicion=ajustar_ignicion,
+                                              ignicion_fija_x=ignicion_fija_x, ignicion_fija_y=ignicion_fija_y)
 
         peor_idx = max(range(len(resultados)), key=lambda i: resultados[i]["fitness"])
         resultados[peor_idx] = elite
