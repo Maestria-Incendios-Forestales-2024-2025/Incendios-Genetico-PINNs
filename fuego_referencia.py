@@ -58,8 +58,8 @@ D_value = cp.float32(10) # metros^2 / hora. Si la celda tiene 30 metros, en una 
 # beta_params = beta_params.tolist()
 # gamma_params = gamma_params.tolist()
 
-beta_params = [0.91, 0.72, 1.38, 1.94, 0.75]
-gamma_params = [0.50, 0.38, 0.84, 0.45, 0.14]
+beta_params = [1.5, 1.5, 1.5, 1.5, 1.5]
+gamma_params = [0.50, 0.50, 0.50, 0.50, 0.50]
 
 veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
 beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
@@ -213,7 +213,7 @@ for t in range(num_steps):
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-cp.save("R_referencia_1.npy", R_new_batch)
+cp.save("R_referencia_2.npy", R_new_batch)
 
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")

@@ -135,10 +135,9 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
     print(f"[DEBUG] Población final: {len(poblacion_cargada)} individuos.")
     return poblacion_cargada
 
-    
 ############################## GUARDADO DE RESULTADOS ###############################################
 
-def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, ajustar_beta_gamma=True):
+def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, ajustar_beta_gamma=True, ajustar_ignicion=True):
     """
     Guarda resultados en un archivo CSV.
     
@@ -153,13 +152,18 @@ def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, a
     csv_filename = os.path.join(resultados_dir, f'resultados_generacion_{gen+1}.csv')
     
     # Definir nombres de columnas dinámicamente
-    if ajustar_beta_gamma:
+    if ajustar_beta_gamma and ajustar_ignicion:   # Exp2
+        fieldnames = ['D', 'A', 'B', 'x', 'y'] \
+                   + [f'beta'] \
+                   + [f'gamma'] \
+                   + ['fitness']
+    elif ajustar_beta_gamma and not ajustar_ignicion:  # Exp3
         fieldnames = ['D', 'A', 'B', 'x', 'y'] \
                    + [f'beta_{i}' for i in range(1, n_betas+1)] \
                    + [f'gamma_{i}' for i in range(1, n_gammas+1)] \
                    + ['fitness']
-    else:
-        fieldnames = ['D', 'A', 'B', 'x', 'y'] + ['fitness']
+    else:                                                      # Exp1
+        fieldnames = ['D', 'A', 'B', 'x', 'y'] + ['fitness'] 
 
     with open(csv_filename, 'w', newline='') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -170,10 +174,12 @@ def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, a
                 'D': resultado['D'],
                 'A': resultado['A'],
                 'B': resultado['B'],
-                'x': resultado['x'],
-                'y': resultado['y'],
                 'fitness': resultado['fitness'],
             }
+
+            if ajustar_ignicion:
+                row['x'] = resultado['x']
+                row['y'] = resultado['y']
             
             if ajustar_beta_gamma:
                 # Expandir betas
