@@ -58,8 +58,11 @@ D_value = cp.float32(10) # metros^2 / hora. Si la celda tiene 30 metros, en una 
 # beta_params = beta_params.tolist()
 # gamma_params = gamma_params.tolist()
 
-beta_params = [1.5, 1.5, 1.5, 1.5, 1.5]
-gamma_params = [0.50, 0.50, 0.50, 0.50, 0.50]
+# beta_params = [1.5, 1.5, 1.5, 1.5, 1.5]
+# gamma_params = [0.50, 0.50, 0.50, 0.50, 0.50]
+
+beta_params = [0.91, 0.72, 1.38, 1.94, 0.75]
+gamma_params = [0.5, 0.38, 0.84, 0.45, 0.14]
 
 veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
 beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
@@ -126,10 +129,8 @@ S_batch = cp.where(vegetacion <= 2, 0, S_batch)  # Celdas no vegetadas son susce
 print(f'Se cumple la condición de Courant para el término advectivo: {courant_batch(dt/2, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
 
 # Coordenadas del punto de ignición
-x_ignicion = cp.array([400])
-y_ignicion = cp.array([600])
-# x_ignicion = 400
-# y_ignicion = 600
+x_ignicion = cp.array([1130, 1300, 620])
+y_ignicion = cp.array([290, 150, 280])
 
 S_batch[:, y_ignicion, x_ignicion] = 0
 I_batch[:, y_ignicion, x_ignicion] = 1
@@ -213,7 +214,7 @@ for t in range(num_steps):
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-cp.save("R_referencia_2.npy", R_new_batch)
+cp.save("R_referencia_3.npy", R_new_batch)
 
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")
