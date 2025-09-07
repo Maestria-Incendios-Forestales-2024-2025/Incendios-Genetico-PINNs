@@ -51,18 +51,17 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamm
     
     # Para cada simulación en el batch
     for i, params in enumerate(parametros_batch):
+        # Inicializar con valores por defecto
+        beta_map = cp.zeros_like(vegetacion, dtype=cp.float32)
+        gamma_map = cp.zeros_like(vegetacion, dtype=cp.float32)
         if ajustar_beta_gamma and len(params) == 7: # Exp2
             beta_val = params[5]  # un solo valor escalar
             gamma_val = params[6]  # un solo valor escalar
             beta_map = cp.full_like(vegetacion, beta_val, dtype=cp.float32)
             gamma_map = cp.full_like(vegetacion, gamma_val, dtype=cp.float32)
         elif ajustar_beta_gamma and len(params) == 13: # Exp3
-            beta_params = params[5]  # Lista de betas por tipo de vegetación
-            gamma_params = params[6]  # Lista de gammas por tipo de vegetación
-         
-            # Inicializar con valores por defecto
-            beta_map = cp.zeros_like(vegetacion, dtype=cp.float32)
-            gamma_map = cp.zeros_like(vegetacion, dtype=cp.float32)
+            beta_params = params[3]  # Lista de betas por tipo de vegetación
+            gamma_params = params[4]  # Lista de gammas por tipo de vegetación
             
             # Mapear valores según tipo de vegetación
             for j, veg_type in enumerate(veg_types):
@@ -75,8 +74,19 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamm
                     beta_map = cp.where(mask, beta_params[j], beta_map)
                     gamma_map = cp.where(mask, gamma_params[j], gamma_map)
         else: 
-            beta_map = cp.full_like(vegetacion, beta_fijo, dtype=cp.float32)
-            gamma_map = cp.full_like(vegetacion, gamma_fijo, dtype=cp.float32)   
+            beta_params = beta_fijo  # Lista de betas por tipo de vegetación
+            gamma_params = gamma_fijo  # Lista de gammas por tipo de vegetación
+            
+            # Mapear valores según tipo de vegetación
+            for j, veg_type in enumerate(veg_types):
+                veg_type = int(veg_type)
+                # Crear máscara para este tipo de vegetación
+                mask = (vegetacion == veg_type)
+                
+                # Asignar valores si tenemos parámetros para este tipo
+                if j < len(beta_params) and j < len(gamma_params):
+                    beta_map = cp.where(mask, beta_params[j], beta_map)
+                    gamma_map = cp.where(mask, gamma_params[j], gamma_map)
         
         beta_batch[i] = beta_map
         gamma_batch[i] = gamma_map

@@ -47,6 +47,7 @@ else:
 
 # Selecciono la ruta según EXP
 ruta_incendio_referencia = rutas[exp]
+print(f"Leyendo mapa de incendio de referencia: {os.path.basename(ruta_incendio_referencia)}")
 
 ############################## CONDICIÓN DE COURANT PARA LOS TÉRMINOS DIFUSIVOS Y ADVECTIVOS ############
 
@@ -61,7 +62,10 @@ limite_parametros_base = [
     (0.0, B_max * cota)     # B
 ]
 
+print(f"Corriendo el experimento {exp}")
+
 if exp == 1:
+
     ajustar_beta_gamma = False
     ajustar_ignicion = True
 
@@ -101,8 +105,8 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 resultados = genetic_algorithm(
-    tamano_poblacion=10000,
-    generaciones=10,
+    tamano_poblacion=10,
+    generaciones=2,
     limite_parametros=limite_parametros,
     ruta_incendio_referencia=ruta_incendio_referencia,
     num_steps=500,
