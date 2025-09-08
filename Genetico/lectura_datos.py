@@ -62,7 +62,8 @@ def preprocesar_datos():
     }
 ############################## CARGA DE ARCHIVO PREENTRENADO ###############################################
 
-def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros, n_betas=5, n_gammas=5):
+def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros, n_betas=5, n_gammas=5,
+                                  ajustar_beta_gamma=True, ajustar_ignicion=True):
     """
     Carga una población preentrenada desde un CSV con columnas:
     D, A, B, x, y, beta_1..beta_5, gamma_1..gamma_5, fitness
@@ -87,26 +88,50 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
         for idx, row in enumerate(reader, start=1):
             try:
                 D = float(row['D']); A = float(row['A']); B = float(row['B'])
-                x = int(float(row['x'])); y = int(float(row['y']))
 
-                betas = cp.array([float(row[f'beta_{i}']) for i in range(1, n_betas+1)],
-                                 dtype=cp.float32)
-                gammas = cp.array([float(row[f'gamma_{i}']) for i in range(1, n_gammas+1)],
-                                  dtype=cp.float32)
+                if ajustar_ignicion:
+                    x = int(float(row['x'])); y = int(float(row['y']))
+
+                if ajustar_beta_gamma and 'beta_1' in row:
+                    betas = cp.array([float(row[f'beta_{i}']) for i in range(1, n_betas+1)],
+                                      dtype=cp.float32)
+                    gammas = cp.array([float(row[f'gamma_{i}']) for i in range(1, n_gammas+1)],
+                                       dtype=cp.float32)
+                elif ajustar_beta_gamma and 'beta' in row:
+                    betas = cp.array([float(row['beta'])], dtype=cp.float32)
+                    gammas = cp.array([float(row['gamma'])], dtype=cp.float32)
 
                 fval = row.get('fitness', '')
                 fitness = (float(fval) if (fval is not None and fval != '') else None)
 
-                poblacion_cargada.append({
-                    "D": D, "A": A, "B": B, "x": x, "y": y,
-                    "betas": betas, "gammas": gammas, "fitness": fitness
-                })
-
-                # Prints de debug solo en casos selectos
-                if idx <= 3 or idx == total_rows // 2 or idx == total_rows:
-                    print(f"[DEBUG] Fila {idx}/{total_rows}: "
-                          f"D={D}, A={A}, B={B}, x={x}, y={y}, "
-                          f"betas={betas.get()}, gammas={gammas.get()}, fitness={fitness}")
+                if ajustar_beta_gamma and ajustar_ignicion:  # Exp2
+                    poblacion_cargada.append({
+                        "D": D, "A": A, "B": B, "x": x, "y": y,
+                        "betas": betas, "gammas": gammas, "fitness": fitness
+                    })
+                    # Prints de debug solo en casos selectos
+                    if idx <= 3 or idx == total_rows // 2 or idx == total_rows:
+                        print(f"[DEBUG] Fila {idx}/{total_rows}: "
+                            f"D={D}, A={A}, B={B}, x={x}, y={y}, "
+                            f"betas={betas.get()}, gammas={gammas.get()}, fitness={fitness}")
+                elif ajustar_beta_gamma and not ajustar_ignicion:    # Exp3
+                    poblacion_cargada.append({
+                        "D": D, "A": A, "B": B,
+                        "betas": betas, "gammas": gammas, "fitness": fitness
+                    })
+                    # Prints de debug solo en casos selectos
+                    if idx <= 3 or idx == total_rows // 2 or idx == total_rows:
+                        print(f"[DEBUG] Fila {idx}/{total_rows}: "
+                            f"D={D}, A={A}, B={B}, "
+                            f"betas={betas.get()}, gammas={gammas.get()}, fitness={fitness}")
+                else:                                        # Exp1
+                    poblacion_cargada.append({
+                        "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness 
+                    })
+                    # Prints de debug solo en casos selectos
+                    if idx <= 3 or idx == total_rows // 2 or idx == total_rows:
+                        print(f"[DEBUG] Fila {idx}/{total_rows}: "
+                            f"D={D}, A={A}, B={B}, x={x}, y={y}, fitness={fitness}")
 
             except (ValueError, KeyError) as e:
                 if idx <= 5:  # solo aviso explícito en las primeras filas

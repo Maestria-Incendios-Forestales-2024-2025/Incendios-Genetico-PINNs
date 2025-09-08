@@ -152,7 +152,8 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
 
 def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia,
                       archivo_preentrenado=None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
-                      ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True, ignicion_fija_x=None, ignicion_fija_y=None):
+                      ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True, 
+                      ignicion_fija_x=None, ignicion_fija_y=None):
     
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
 
@@ -162,7 +163,8 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
 
     # Si hay una población preentrenada la carga, sino se genera una nueva población inicial
     if archivo_preentrenado:
-        resultados = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros)
+        resultados = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros,
+                                                   ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
     else:
         combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
         resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros,
@@ -174,21 +176,21 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
     mutation_rate = 0.3 * 0.99**generacion_preentrenada
 
     for i, individuo in enumerate(resultados, 1):
-        if ajustar_beta_gamma and ajustar_ignicion:
+        if ajustar_beta_gamma and ajustar_ignicion:   # Exp2
             print(
                 f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
                 f'\t beta={individuo["betas"]}, \n'
                 f'\t gamma={individuo["gammas"]}, \n'
                 f'\t fitness={individuo["fitness"]:.4f}'
             )
-        if ajustar_beta_gamma and not ajustar_ignicion:
+        elif ajustar_beta_gamma and not ajustar_ignicion:  # Exp3
             print(
                 f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, \n'
                 f'\t beta={individuo["betas"]}, \n'
                 f'\t gamma={individuo["gammas"]}, \n'
                 f'\t fitness={individuo["fitness"]:.4f}'
             )
-        else:
+        else:                                             # Exp1
             print(
                 f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, x={individuo["x"]}, y={individuo["y"]}, \n'
                 f'\t fitness={individuo["fitness"]:.4f}'
@@ -236,7 +238,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
                     f'\t gamma={individuo["gammas"]}, \n'
                     f'\t fitness={individuo["fitness"]:.4f}'
                 )
-            if ajustar_beta_gamma and not ajustar_ignicion:
+            elif ajustar_beta_gamma and not ajustar_ignicion:
                 print(
                     f'Individuo {i}: D={individuo["D"]}, A={individuo["A"]}, B={individuo["B"]}, \n'
                     f'\t beta={individuo["betas"]}, \n'

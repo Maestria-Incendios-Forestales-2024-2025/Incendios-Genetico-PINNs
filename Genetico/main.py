@@ -11,6 +11,15 @@ print(cp.__version__)
 print("CUDA runtime:", cp.cuda.runtime.runtimeGetVersion())
 print("CUDA driver :", cp.cuda.runtime.driverGetVersion())
 
+# Obtengo la variable por línea de comando
+parser = argparse.ArgumentParser()
+parser.add_argument("--exp", type=int, default=1, help="Número de experimento")
+parser.add_argument("--pretrained", type=str, default=None, help="Ruta al archivo preentrenado")
+parser.add_argument("--start_gen", type=int, default=0, help="Generación desde la que entrenar")
+args = parser.parse_args()
+
+exp = args.exp
+
 ############################## CARGADO DE MAPAS #######################################################
 
 datos = preprocesar_datos()
@@ -20,12 +29,6 @@ h_dx_mapa = datos["h_dx"]
 h_dy_mapa = datos["h_dy"]
 
 ############################## INCENDIO DE REFERENCIA ####################################################
-
-# Obtengo la variable por línea de comando
-parser = argparse.ArgumentParser()
-parser.add_argument("--exp", type=int, default=1, help="Número de experimento")
-args = parser.parse_args()
-exp = args.exp
 
 # Detecto dónde estoy corriendo
 hostname = socket.gethostname()
@@ -49,7 +52,12 @@ else:
 ruta_incendio_referencia = rutas[exp]
 print(f"Leyendo mapa de incendio de referencia: {os.path.basename(ruta_incendio_referencia)}")
 
-############################## CONDICIÓN DE COURANT PARA LOS TÉRMINOS DIFUSIVOS Y ADVECTIVOS ############
+############################## CARGA DE ARCHIVO PREENTRENADO ####################################
+
+archivo_preentrenado = args.pretrained
+generacion_preentranada = args.start_gen
+
+############################## CONDICIÓN DE COURANT PARA LOS TÉRMINOS DIFUSIVOS Y ADVECTIVOS ####################################
 
 A_max = float(d / (cp.sqrt(2)*dt/2*cp.max(cp.sqrt(wx**2+wy**2)))) # constante de viento
 B_max = float(d / (cp.sqrt(2)*dt/2*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2)))) # constante de pendiente
@@ -109,6 +117,8 @@ resultados = genetic_algorithm(
     generaciones=2,
     limite_parametros=limite_parametros,
     ruta_incendio_referencia=ruta_incendio_referencia,
+    archivo_preentrenado=archivo_preentrenado,
+    generacion_preentrenada=generacion_preentranada,
     num_steps=500,
     batch_size=5,
     ajustar_beta_gamma=ajustar_beta_gamma,
