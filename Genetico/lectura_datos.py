@@ -154,8 +154,30 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
         faltantes = tamano_poblacion - num_cargados
         print(f"[DEBUG] Faltan {faltantes} individuos. Generando población inicial para completar.")
         nuevos = poblacion_inicial(faltantes, limite_parametros)
-        nuevos_formateados = [n + [[], [], None] for n in nuevos]
-        poblacion_cargada += nuevos_formateados
+
+        # Reformatear cada nuevo individuo con las mismas claves que los cargados
+        for ind in nuevos:
+            if ajustar_beta_gamma and ajustar_ignicion:  # Exp2
+                poblacion_cargada.append({
+                    "D": ind["D"], "A": ind["A"], "B": ind["B"],
+                    "x": ind["x"], "y": ind["y"],
+                    "betas": ind.get("betas", cp.zeros(n_betas, dtype=cp.float32)),
+                    "gammas": ind.get("gammas", cp.zeros(n_gammas, dtype=cp.float32)),
+                    "fitness": ind.get("fitness", None)
+                })
+            elif ajustar_beta_gamma and not ajustar_ignicion:  # Exp3
+                poblacion_cargada.append({
+                    "D": ind["D"], "A": ind["A"], "B": ind["B"],
+                    "betas": ind.get("betas", cp.zeros(n_betas, dtype=cp.float32)),
+                    "gammas": ind.get("gammas", cp.zeros(n_gammas, dtype=cp.float32)),
+                    "fitness": ind.get("fitness", None)
+                })
+            else:  # Exp1
+                poblacion_cargada.append({
+                    "D": ind["D"], "A": ind["A"], "B": ind["B"],
+                    "x": ind["x"], "y": ind["y"],
+                    "fitness": ind.get("fitness", None)
+                })
 
     print(f"[DEBUG] Población final: {len(poblacion_cargada)} individuos.")
     return poblacion_cargada
