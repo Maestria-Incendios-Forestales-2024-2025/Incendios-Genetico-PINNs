@@ -56,8 +56,6 @@ def validate_beta_gamma(betas, gammas):
     """Valida los parámetros beta y gamma. Beta[i] > Gamma[i] para todo i"""
     mask = gammas >= betas
     gammas[mask] = 0.9 * betas[mask]
-    if betas.size == 1:
-        return betas.item(), gammas.item()
     return betas, gammas
 
 ############################## PROCESAMIENTO EN BATCH ###############################################

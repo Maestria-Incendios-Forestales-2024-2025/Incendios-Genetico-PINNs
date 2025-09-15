@@ -229,17 +229,25 @@ def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, a
                 row['y'] = resultado['y']
             
             if ajustar_beta_gamma:
-                if resultado['betas'].size > 1:
+                betas = resultado['betas']
+                gammas = resultado['gammas']
+
+                # Convertir a array siempre
+                if not isinstance(betas, (cp.ndarray, np.ndarray)):
+                    betas = cp.array([betas], dtype=cp.float32)
+                if not isinstance(gammas, (cp.ndarray, np.ndarray)):
+                    gammas = cp.array([gammas], dtype=cp.float32)
+
+                if betas.size > 1:
                     # Expandir betas
-                    for i, beta in enumerate(resultado['betas'], start=1):
-                        row[f'beta_{i}'] = beta
-            
+                    for i, beta in enumerate(betas, start=1):
+                        row[f'beta_{i}'] = float(beta)  # aseguro que sea serializable
                     # Expandir gammas
-                    for i, gamma in enumerate(resultado['gammas'], start=1):
-                        row[f'gamma_{i}'] = gamma
+                    for i, gamma in enumerate(gammas, start=1):
+                        row[f'gamma_{i}'] = float(gamma)
                 else:
-                    row['beta'] = resultado['betas']
-                    row['gamma'] = resultado['gammas']
+                    row['beta'] = float(betas)
+                    row['gamma'] = float(gammas)
             writer.writerow(row)
     
     print(f"✅ Resultados guardados en {csv_filename}")
