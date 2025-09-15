@@ -98,8 +98,8 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
                     gammas = cp.array([float(row[f'gamma_{i}']) for i in range(1, n_gammas+1)],
                                        dtype=cp.float32)
                 elif ajustar_beta_gamma and 'beta' in row:
-                    betas = cp.array([float(row['beta'])], dtype=cp.float32)
-                    gammas = cp.array([float(row['gamma'])], dtype=cp.float32)
+                    betas = cp.array(float(row['beta']), dtype=cp.float32)
+                    gammas = cp.array(float(row['gamma']), dtype=cp.float32)
 
                 fval = row.get('fitness', '')
                 fitness = (float(fval) if (fval is not None and fval != '') else None)
@@ -179,8 +179,8 @@ def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, a
     # Definir nombres de columnas dinámicamente
     if ajustar_beta_gamma and ajustar_ignicion:   # Exp2
         fieldnames = ['D', 'A', 'B', 'x', 'y'] \
-                   + [f'beta'] \
-                   + [f'gamma'] \
+                   + ['beta'] \
+                   + ['gamma'] \
                    + ['fitness']
     elif ajustar_beta_gamma and not ajustar_ignicion:  # Exp3
         fieldnames = ['D', 'A', 'B'] \
