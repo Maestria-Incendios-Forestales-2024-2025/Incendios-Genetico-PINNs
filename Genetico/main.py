@@ -7,9 +7,6 @@ import socket, os
 import argparse
 
 print(cp.cuda.runtime.getDeviceProperties(0)['name'])
-print(cp.__version__)
-print("CUDA runtime:", cp.cuda.runtime.runtimeGetVersion())
-print("CUDA driver :", cp.cuda.runtime.driverGetVersion())
 
 # Obtengo la variable por línea de comando
 parser = argparse.ArgumentParser()
@@ -32,6 +29,7 @@ h_dy_mapa = datos["h_dy"]
 
 # Detecto dónde estoy corriendo
 hostname = socket.gethostname()
+print(hostname)
 
 if "rocks7frontend" in hostname or "compute" in hostname:
     base_cluster = "/home/lucas.becerra/Incendios-Genetico-PINNs/"
@@ -73,7 +71,6 @@ limite_parametros_base = [
 print(f"Corriendo el experimento {exp}")
 
 if exp == 1:
-
     ajustar_beta_gamma = False
     ajustar_ignicion = True
 
@@ -113,8 +110,8 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 resultados = genetic_algorithm(
-    tamano_poblacion=10,
-    generaciones=2,
+    tamano_poblacion=10000,
+    generaciones=12,
     limite_parametros=limite_parametros,
     ruta_incendio_referencia=ruta_incendio_referencia,
     archivo_preentrenado=archivo_preentrenado,
