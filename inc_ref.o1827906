@@ -1,9 +1,0 @@
-Allocated GPU(s) with id(s):  0
-Setting CUDA_VISIBLE_DEVICES=0
-Setting NV_GPU=0
-DeviceID: 0
-Valores de beta: [0.91, 0.72, 1.38, 1.94, 0.75]
-Valores de gamma: [0.5, 0.38, 0.84, 0.45, 0.14]
-Se cumple la condición de Courant para el término advectivo: [ True]
-Tiempo en GPU: 2705.347 ms
-Numero de celdas quemadas: 43304
