@@ -22,7 +22,8 @@ class FireSpread_PINN(nn.Module):
         for i in range(len(layers) - 1):
             self.layers.append(nn.Linear(layers[i], layers[i+1]))
         self.activation = nn.Tanh()
-        # inicialización como tensores en el device
+
+        # inicialización de pesos como tensores en el device
         self.w_ic  = torch.tensor(1.0, device=device)
         self.w_bc  = torch.tensor(1.0, device=device)
         self.w_pde = torch.tensor(1.0, device=device)
@@ -140,6 +141,11 @@ class FireSpread_PINN(nn.Module):
         Recalcula pesos adaptativos para IC, BC y PDE cada 'every' épocas.
         """
         eps = 1e-8
+        alpha = 0.9
+
+        # Asignamos los pesos viejos a una variable intermedia
+        w_ic_old, w_bc_old, w_pde_old = self.w_ic, self.w_bc, self.w_pde
+
         params_for_grad = [p for p in self.parameters() if p.requires_grad]
 
         grads_ic = torch.autograd.grad(loss_ic, params_for_grad, retain_graph=True, create_graph=False, allow_unused=True)
@@ -157,10 +163,14 @@ class FireSpread_PINN(nn.Module):
         norms = torch.stack([g_ic, g_bc, g_pde]).clamp(min=eps)
 
         lambdas = (norms.sum() / norms)  
-        lambdas = lambdas / lambdas.mean()  # normalización
 
         # actualizar atributos internos
         self.w_ic, self.w_bc, self.w_pde = [l.item() for l in lambdas]
+
+        # Asignamos nuevos valores
+        self.w_ic = alpha * w_ic_old + (1-alpha) * self.w_ic
+        self.w_bc = alpha * w_bc_old + (1-alpha) * self.w_bc
+        self.w_pde = alpha * w_pde_old + (1-alpha) * self.w_pde
 
         return self.w_ic, self.w_bc, self.w_pde
 
@@ -307,7 +317,8 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         temporal_weights = temporal_weights / (temporal_weights.mean() + 1e-12)
 
         # Actualización de pesos (usar el grafo antes del step)
-        if epoch % 1000 == 0:
+        if epoch % 1000 == 0 and epoch > 0:
+            # Computamos los pesos nuevos
             model.w_ic, model.w_bc, model.w_pde = model.update_loss_weights(loss_ic, loss_bc, loss_phys)
             print(f"[Epoch {epoch}] Pesos actualizados: w_pde = {model.w_pde}, w_ic = {model.w_ic}, w_bc = {model.w_bc}")
 
@@ -321,10 +332,10 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         # 📌 Guardar el mejor modelo
         if total_loss.item() < best_loss:
             best_loss = total_loss.item()
-            best_model_state = copy.deepcopy(model.state_dict())
+            best_model_state = copy.deepcopy({k: v.cpu() for k, v in model.state_dict().items()}) # Transfiere el modelo a la CPU
 
-        # if epoch % 100 == 0 o epoch == epochs_adam - 1:
-        print(f"Adam Época {epoch} | Loss: {total_loss.item()} | PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | BC Loss: {loss_bc.item()}")
+        if epoch % 100 == 0 or epoch == epochs_adam - 1:
+            print(f"Adam Época {epoch} | Loss: {total_loss.item()} | PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | BC Loss: {loss_bc.item()}")
 
         last_epoch = epoch
 
