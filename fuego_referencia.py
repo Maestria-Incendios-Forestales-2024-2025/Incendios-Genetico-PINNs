@@ -41,7 +41,7 @@ ny, nx = vegetacion.shape  # Usamos cualquier mapa para obtener las dimensiones
 # Tamaño de cada celda
 d = cp.float32(30) # metros
 # Coeficiente de difusión
-D_value = cp.float32(10) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
+D_value = cp.float32(12.014) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
 # Sortear valores aleatorios para beta_params y gamma_params
 # cp.random.seed(45)
@@ -102,10 +102,10 @@ wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
 wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
 
 # Constante A adimensional de viento
-A_value = cp.float32(1e-4) # 10^-3 está al doble del límite de estabilidad
+A_value = cp.float32(0.84e-4) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
-B_value = cp.float32(15) # m/h
+B_value = cp.float32(15.637) # m/h
 
 # Cálculo de la pendiente (usando mapas de pendiente y orientación)
 h_dx_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
@@ -129,8 +129,8 @@ S_batch = cp.where(vegetacion <= 2, 0, S_batch)  # Celdas no vegetadas son susce
 print(f'Se cumple la condición de Courant para el término advectivo: {courant_batch(dt/2, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
 
 # Coordenadas del punto de ignición
-x_ignicion = cp.array([1130, 1300, 620])
-y_ignicion = cp.array([290, 150, 280])
+x_ignicion = cp.array([402])
+y_ignicion = cp.array([598])
 
 S_batch[:, y_ignicion, x_ignicion] = 0
 I_batch[:, y_ignicion, x_ignicion] = 1
@@ -214,7 +214,7 @@ for t in range(num_steps):
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-cp.save("R_referencia_3.npy", R_new_batch)
+cp.save("R_bootstrap_exp_1.npy", R_new_batch)
 
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")
