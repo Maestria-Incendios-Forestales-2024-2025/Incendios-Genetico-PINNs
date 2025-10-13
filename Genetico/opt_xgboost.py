@@ -26,8 +26,8 @@ X_train, X_valid, y_train, y_valid = train_test_split(
 
 def objective(trial):
     params = {
-        "n_estimators": trial.suggest_int("n_estimators", 500, 6000),
-        "learning_rate": trial.suggest_float("learning_rate", 0.005, 0.3, log=True),
+        "n_estimators": trial.suggest_int("n_estimators", 500, 10000),
+        "learning_rate": trial.suggest_float("learning_rate", 0.001, 0.3, log=True),
         "max_depth": trial.suggest_int("max_depth", 3, 15),
         "subsample": trial.suggest_float("subsample", 0.5, 1.0),
         "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 1.0),
