@@ -1,8 +1,8 @@
-from config import ruta_mapas
+from Genetico.config import ruta_mapas
 import numpy as np # type: ignore
 import cupy as cp # type: ignore
 import csv, os
-from operadores_geneticos import poblacion_inicial
+from Genetico.operadores_geneticos import poblacion_inicial
 
 ############################## LEER MAPAS RASTER ###############################################
 
@@ -42,8 +42,13 @@ def preprocesar_datos():
     wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
     wy = -vientov * cp.cos(vientod_rad) * 1000 # Norte = cos(ángulo desde Norte)
 
-    h_dx = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion * cp.pi / 180 - cp.pi/2)
-    h_dy = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion * cp.pi / 180 - cp.pi/2)
+    orientacion_rad = orientacion * cp.pi / 180
+
+    # h_dx = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad)
+    # h_dy = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad)
+
+    h_dx = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad - cp.pi/2)
+    h_dy = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad - cp.pi/2)
 
     return {
         "vientod": cp.flipud(vientod),
