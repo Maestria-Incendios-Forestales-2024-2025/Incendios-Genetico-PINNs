@@ -3,8 +3,9 @@ import numpy as np
 import cupy as cp # type: ignore
 import cupyx.scipy.ndimage #type: ignore
 from Genetico.config import ruta_mapas
+from Genetico.lectura_datos import preprocesar_datos
 
-############################## FUNCIÓN PARA AGREGAR UNA DIMENSIÓN ###############################################
+############################## FUNCIÓN PARA AGREGAR UNA DIMENSIÓN ##################    #############################
 
 def create_batch(array_base, n_batch):
     # Se repite array_base n_batch veces en un bloque contiguo
@@ -12,26 +13,12 @@ def create_batch(array_base, n_batch):
 
 ############################## CARGADO DE MAPAS ###############################################
 
-# Función para leer archivos .asc
-def leer_asc(ruta):
-    with open(ruta, 'r') as f:
-        # Leer el encabezado para obtener el tamaño de la grilla
-        for _ in range(6):  # Las primeras 6 líneas suelen contener los metadatos
-            f.readline()
-        
-        # Leer el resto de los datos y convertirlos a una matriz
-        data = np.loadtxt(f)  # Leer el archivo de datos en un array de numpy
-        return cp.array(data, dtype=cp.float32)
-
-# Leer los mapas
-datos = [leer_asc(mapa) for mapa in ruta_mapas]
-
-# Asignar cada matriz a una variable (e invertir verticalmente)
-vientod = cp.flipud(datos[0])
-vientov = cp.flipud(datos[1])
-pendiente = cp.flipud(datos[2])
-vegetacion = cp.flipud(datos[3])
-orientacion = cp.flipud(datos[4])
+datos = preprocesar_datos()
+vegetacion = datos["vegetacion"]
+wx = datos["wx"]
+wy = datos["wy"]
+h_dx_mapa = datos["h_dx"]
+h_dy_mapa = datos["h_dy"]
 
 # Obtener dimensiones del mapa
 ny, nx = vegetacion.shape  # Usamos cualquier mapa para obtener las dimensiones
@@ -41,28 +28,16 @@ ny, nx = vegetacion.shape  # Usamos cualquier mapa para obtener las dimensiones
 # Tamaño de cada celda
 d = cp.float32(30) # metros
 # Coeficiente de difusión
-D_value = cp.float32(12.014) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
+D_value = cp.float32(9.255) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
-# Sortear valores aleatorios para beta_params y gamma_params
-# cp.random.seed(45)
-# beta_params = cp.random.uniform(0.2, 2, size=5)
-# gamma_params = cp.random.uniform(0.05, 1, size=5)
+# beta_params = [1.189, 1.189, 1.189, 1.189, 1.189]
+# gamma_params = [0.497, 0.497, 0.497, 0.497, 0.497]
 
-# # Asegurar que beta > gamma en cada posición
-# for i in range(5):
-#     if beta_params[i] <= gamma_params[i]:
-#         gamma_params[i] = beta_params[i] - cp.random.uniform(0.05, 0.15)
-#         if gamma_params[i] < 0.01:
-#             gamma_params[i] = 0.01
+# beta_params = [0.91, 0.72, 1.38, 1.94, 0.75]
+# gamma_params = [0.5, 0.38, 0.84, 0.45, 0.14]
 
-# beta_params = beta_params.tolist()
-# gamma_params = gamma_params.tolist()
-
-# beta_params = [1.5, 1.5, 1.5, 1.5, 1.5]
-# gamma_params = [0.50, 0.50, 0.50, 0.50, 0.50]
-
-beta_params = [0.91, 0.72, 1.38, 1.94, 0.75]
-gamma_params = [0.5, 0.38, 0.84, 0.45, 0.14]
+beta_params = [0.724, 0.537, 0.970, 1.976, 0.893]
+gamma_params = [0.297, 0.185, 0.442, 0.428, 0.316]
 
 veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
 beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
@@ -93,23 +68,11 @@ gamma = cupyx.scipy.ndimage.gaussian_filter(gamma, sigma=10.0)
 
 dt = cp.float32(1/2) # Paso temporal
 
-# Convertir a radianes
-vientod_rad = vientod * cp.pi / 180
-# Componentes cartesianas del viento:
-# wx: componente Este-Oeste (positivo hacia el Este)
-# wy: componente Norte-Sur (positivo hacia el Norte)
-wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
-wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
-
 # Constante A adimensional de viento
-A_value = cp.float32(0.84e-4) # 10^-3 está al doble del límite de estabilidad
+A_value = cp.float32(0.982e-4) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
-B_value = cp.float32(15.637) # m/h
-
-# Cálculo de la pendiente (usando mapas de pendiente y orientación)
-h_dx_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
-h_dy_mapa = (cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion * cp.pi / 180 - cp.pi/2)).astype(cp.float32)
+B_value = cp.float32(14.892) # m/h
 
 n_batch = 1
 
@@ -129,8 +92,8 @@ S_batch = cp.where(vegetacion <= 2, 0, S_batch)  # Celdas no vegetadas son susce
 print(f'Se cumple la condición de Courant para el término advectivo: {courant_batch(dt/2, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
 
 # Coordenadas del punto de ignición
-x_ignicion = cp.array([402])
-y_ignicion = cp.array([598])
+x_ignicion = cp.array([1130, 1300, 620])
+y_ignicion = cp.array([290, 150, 280])
 
 S_batch[:, y_ignicion, x_ignicion] = 0
 I_batch[:, y_ignicion, x_ignicion] = 1
@@ -214,7 +177,7 @@ for t in range(num_steps):
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-cp.save("R_bootstrap_exp_1.npy", R_new_batch)
+cp.save("R_bootstrap_3.npy", R_new_batch)
 
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")
