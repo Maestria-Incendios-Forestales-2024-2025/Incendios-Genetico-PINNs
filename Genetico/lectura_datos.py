@@ -44,11 +44,11 @@ def preprocesar_datos():
 
     orientacion_rad = orientacion * cp.pi / 180
 
-    # h_dx = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad)
-    # h_dy = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad)
+    h_dx = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad)
+    h_dy = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad)
 
-    h_dx = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad - cp.pi/2)
-    h_dy = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad - cp.pi/2)
+    # h_dx = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad - cp.pi/2)
+    # h_dy = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad - cp.pi/2)
 
     return {
         "vientod": cp.flipud(vientod),
