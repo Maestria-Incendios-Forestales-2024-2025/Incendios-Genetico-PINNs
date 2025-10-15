@@ -1,6 +1,7 @@
 import torch # type: ignore
 import torch.nn as nn # type: ignore
 import torch.optim as optim # type: ignore
+import torch.nn.functional as F
 import numpy as np # type: ignore
 import copy
 import os
@@ -16,7 +17,8 @@ domain_size = 2
 MAX_BLOCK_POINTS = 4096  # límite de puntos por bloque temporal para estabilidad de memoria
 
 class FireSpread_PINN(nn.Module):
-    def __init__(self, layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3]):
+    def __init__(self, modo='forward', beta = 1.0, gamma = 0.3, D_I = 0.005,
+                layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3]):
         super().__init__()
         self.layers = nn.ModuleList()
         for i in range(len(layers) - 1):
@@ -27,7 +29,16 @@ class FireSpread_PINN(nn.Module):
         self.w_ic  = torch.tensor(1.0, device=device)
         self.w_bc  = torch.tensor(1.0, device=device)
         self.w_pde = torch.tensor(1.0, device=device)
-    
+
+        # Parámetros del modelo
+        self.beta = beta
+        self.gamma = gamma
+
+        if modo == 'forward':
+            self.D_I = D_I
+        elif modo == 'inverse':
+            self.D_I = nn.Parameter(torch.tensor(D_I, device=device))
+
     def forward(self, x, y, t):
         inputs = torch.cat((x, y, t), dim=1)
         x_scaled = 2 * (inputs[:, 0:1] / domain_size) - 1
@@ -42,7 +53,7 @@ class FireSpread_PINN(nn.Module):
     def loss_initial_condition(self, x_ic, y_ic, t_ic, S0, I0, R0):
         pred = self.forward(x_ic, y_ic, t_ic)
         S_pred, I_pred, R_pred = pred[:, 0:1], pred[:, 1:2], pred[:, 2:3]
-        return nn.MSELoss()(S_pred, S0) + nn.MSELoss()(I_pred, I0) + nn.MSELoss()(R_pred, R0)
+        return F.mse_loss(S_pred, S0) + F.mse_loss(I_pred, I0) + F.mse_loss(R_pred, R0)
 
     #---------------- PÉRDIDA POR CONDICIONES DE BORDE ----------------#
     def loss_boundary_condition(self, y_top, y_bottom, x_left, x_right, x_bc, y_bc, t_bc):
@@ -59,8 +70,8 @@ class FireSpread_PINN(nn.Module):
         S_right_pred, I_right_pred, R_right_pred = right_pred[:, 0:1], right_pred[:, 1:2], right_pred[:, 2:3]
 
         # Pérdida por condiciones de borde
-        loss_top_bc = nn.MSELoss()(S_top_pred, S_bottom_pred) + nn.MSELoss()(I_top_pred, I_bottom_pred) + nn.MSELoss()(R_top_pred, R_bottom_pred)
-        loss_left_bc = nn.MSELoss()(S_left_pred, S_right_pred) + nn.MSELoss()(I_left_pred, I_right_pred) + nn.MSELoss()(R_left_pred, R_right_pred)
+        loss_top_bc = F.mse_loss(S_top_pred, S_bottom_pred) + F.mse_loss(I_top_pred, I_bottom_pred) + F.mse_loss(R_top_pred, R_bottom_pred)
+        loss_left_bc = F.mse_loss(S_left_pred, S_right_pred) + F.mse_loss(I_left_pred, I_right_pred) + F.mse_loss(R_left_pred, R_right_pred)
 
         return loss_top_bc + loss_left_bc
 
@@ -129,7 +140,12 @@ class FireSpread_PINN(nn.Module):
 
         return pde_loss, temporal_loss
 
-    # -------------------- PÉRDIDA POR NO NEGATIVIDAD --------------------
+    # -------------------- PÉRDIDA POR LOS DATOS --------------------#
+    def loss_data(self, x_data, y_data, t_data, S_data, I_data, R_data):
+        S_pred, I_pred, R_pred = self.forward(x_data, y_data, t_data)
+        return F.mse_loss(S_pred, S_data) + F.mse_loss(I_pred, I_data) + F.mse_loss(R_pred, R_data)
+
+    # -------------------- PÉRDIDA POR NO NEGATIVIDAD --------------------#
     def non_negative_loss(self, x, y, t):
         S, I, R = self.forward(x, y, t).split(1, dim=1)
         loss = torch.mean(torch.relu(-S)) + torch.mean(torch.relu(-I)) + torch.mean(torch.relu(-R))
@@ -317,10 +333,10 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         temporal_weights = temporal_weights / (temporal_weights.mean() + 1e-12)
 
         # Actualización de pesos (usar el grafo antes del step)
-        if epoch % 1000 == 0 and epoch > 0:
-            # Computamos los pesos nuevos
-            model.w_ic, model.w_bc, model.w_pde = model.update_loss_weights(loss_ic, loss_bc, loss_phys)
-            print(f"[Epoch {epoch}] Pesos actualizados: w_pde = {model.w_pde}, w_ic = {model.w_ic}, w_bc = {model.w_bc}")
+        # if epoch % 1000 == 0 and epoch > 0:
+        #     # Computamos los pesos nuevos
+        #     model.w_ic, model.w_bc, model.w_pde = model.update_loss_weights(loss_ic, loss_bc, loss_phys)
+        #     print(f"[Epoch {epoch}] Pesos actualizados: w_pde = {model.w_pde}, w_ic = {model.w_ic}, w_bc = {model.w_bc}")
 
         optimizer.step()
 
