@@ -33,10 +33,12 @@ class FireSpread_PINN(nn.Module):
         # Parámetros del modelo
         self.beta = beta
         self.gamma = gamma
+        self.mode = modo
 
-        if modo == 'forward':
+        # Parámetro D_I puede ser fijo o entrenable
+        if self.mode == 'forward':
             self.D_I = D_I
-        elif modo == 'inverse':
+        elif self.mode == 'inverse':
             self.D_I = nn.Parameter(torch.tensor(D_I, device=device))
 
     def forward(self, x, y, t):
@@ -76,7 +78,7 @@ class FireSpread_PINN(nn.Module):
         return loss_top_bc + loss_left_bc
 
     #---------------- PÉRDIDA POR LA FÍSICA ----------------#
-    def loss_pde(self, x_phys, y_phys, t_phys, D_I, beta_val, gamma_val, temporal_weights, N_blocks):
+    def loss_pde(self, x_phys, y_phys, t_phys, temporal_weights, N_blocks):
         # Crear bloques temporales
         T_final = temporal_domain
         t_blocks = torch.linspace(0, T_final, N_blocks + 1, device=device)
@@ -120,9 +122,9 @@ class FireSpread_PINN(nn.Module):
                 d2I_dy2 = torch.autograd.grad(dI_dy, y_block, torch.ones_like(dI_dy), create_graph=True)[0]
 
                 # Residuales PDE
-                loss_S = dS_dt + beta_val * S_pred * I_pred
-                loss_I = dI_dt - (beta_val * S_pred * I_pred - gamma_val * I_pred) - D_I * (d2I_dx2 + d2I_dy2)
-                loss_R = dR_dt - gamma_val * I_pred
+                loss_S = dS_dt + self.beta * S_pred * I_pred
+                loss_I = dI_dt - (self.beta * S_pred * I_pred - self.gamma * I_pred) - self.D_I * (d2I_dx2 + d2I_dy2)
+                loss_R = dR_dt - self.gamma * I_pred
 
                 block_loss = (loss_S**2 + loss_I**2 + loss_R**2).mean()
 
@@ -219,8 +221,13 @@ class FireSpread_PINN(nn.Module):
         loss_bc = self.loss_boundary_condition(*data['bc'])
         loss_phys, temporal_losses = self.loss_pde(*data['phys'], *params)
 
-        # combinación lineal con los pesos
-        total_loss = self.w_ic * loss_ic + self.w_bc * loss_bc + self.w_pde * loss_phys
+        if self.mode == 'inverse':
+            loss_data = self.loss_data(*data['data'])
+            # combinación lineal con los pesos
+            total_loss = self.w_ic * loss_ic + self.w_bc * loss_bc + self.w_pde * loss_phys + loss_data
+        else:
+            # combinación lineal con los pesos
+            total_loss = self.w_ic * loss_ic + self.w_bc * loss_bc + self.w_pde * loss_phys
 
         optimizer.zero_grad()
         # Retener grafo para permitir autograd.grad en update_loss_weights
@@ -231,6 +238,7 @@ class FireSpread_PINN(nn.Module):
             loss_phys,  # no detach: se necesita el grafo para autograd.grad
             loss_ic,    # no detach
             loss_bc,    # no detach
+            loss_data if self.mode == 'inverse' else torch.tensor(0.0, device=device),
             temporal_losses.detach(),
         )
 
