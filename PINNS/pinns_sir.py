@@ -30,7 +30,7 @@ end_time = torch.cuda.Event(enable_timing=True)
 
 start_time.record()
 model, optimizer, best_loss, last_epoch = train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=epochs_adam,
-                                                    checkpoint_path=f"adaptive_pinns_DI{D_I}_beta{beta_val}.pth")
+                                                    checkpoint_path=f"adaptive_pinns_DI{D_I}_beta{beta_val}_1131173.pth")
 end_time.record()
 
 # Sincronizar para asegurar medición correcta
