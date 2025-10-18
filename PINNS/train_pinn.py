@@ -333,7 +333,7 @@ def train_pinn(modo='forward',
 
     D_I_history = []
 
-    print(f"Entrenando PINNs con D = {self.D_I}, beta = {self.beta}, gamma = {self.gamma}")
+    print(f"Entrenando PINNs con D = {model.D_I}, beta = {model.beta}, gamma = {model.gamma}")
 
     for epoch in range(start_epoch, epochs_adam):
         if epoch % 500 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
@@ -362,7 +362,7 @@ def train_pinn(modo='forward',
             'data': (t_data, S_data, I_data, R_data) if model.mode == 'inverse' else None,
         }
 
-        params = (self.D_I, self.beta, self.gamma, temporal_weights, N_blocks)
+        params = (model.D_I, model.beta, model.gamma, temporal_weights, N_blocks)
 
         total_loss, loss_phys, loss_ic, loss_bc, loss_data, temporal_losses = model.closure(optimizer, data, params)
 
