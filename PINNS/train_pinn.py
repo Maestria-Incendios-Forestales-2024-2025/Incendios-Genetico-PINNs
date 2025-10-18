@@ -280,7 +280,11 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
 
     print(f"Entrenando PINNs con D = {D_I}, beta = {beta_val}, gamma = {gamma_val}")
 
-    for epoch in range(start_epoch, epochs_adam):
+    # Inicializar last_epoch por si el bucle no se ejecuta (ej. start_epoch >= epochs_adam
+    # cuando se reanuda desde checkpoint). Se actualizará dentro del bucle si hay iteraciones.
+    last_epoch = start_epoch - 1
+
+    for epoch in range(start_epoch, start_epoch+epochs_adam):
         if epoch % 500 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
             x_interior, y_interior, t_interior = model.sample_by_nonlinearity(N_interior)
             x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
@@ -317,10 +321,10 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         temporal_weights = temporal_weights / (temporal_weights.mean() + 1e-12)
 
         # Actualización de pesos (usar el grafo antes del step)
-        if epoch % 1000 == 0 and epoch > 0:
-            # Computamos los pesos nuevos
-            model.w_ic, model.w_bc, model.w_pde = model.update_loss_weights(loss_ic, loss_bc, loss_phys)
-            print(f"[Epoch {epoch}] Pesos actualizados: w_pde = {model.w_pde}, w_ic = {model.w_ic}, w_bc = {model.w_bc}")
+        # if epoch % 1000 == 0 and epoch > 0:
+        #     # Computamos los pesos nuevos
+        #     model.w_ic, model.w_bc, model.w_pde = model.update_loss_weights(loss_ic, loss_bc, loss_phys)
+        #     print(f"[Epoch {epoch}] Pesos actualizados: w_pde = {model.w_pde}, w_ic = {model.w_ic}, w_bc = {model.w_bc}")
 
         optimizer.step()
 
