@@ -1,6 +1,6 @@
 import torch # type: ignore
 from train_pinn import train_pinn, domain_size
-import sys
+import sys, os
 
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -21,6 +21,8 @@ epochs_adam = 10000
 beta_val = 1.0
 D_I = 0.005
 
+job_id = os.environ.get("SLURM_JOB_ID", None)
+
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
 
 start_time = torch.cuda.Event(enable_timing=True)
@@ -28,7 +30,7 @@ end_time = torch.cuda.Event(enable_timing=True)
 
 start_time.record()
 model, optimizer, best_loss, last_epoch = train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=epochs_adam,
-                                                    checkpoint_path=None)
+                                                    checkpoint_path=f"adaptive_pinns_DI{D_I}_beta{beta_val}.pth")
 end_time.record()
 
 # Sincronizar para asegurar medición correcta
@@ -45,6 +47,6 @@ torch.save({
     'optimizer_state_dict': optimizer.state_dict(),
     'best_loss': best_loss,
     'epoch': last_epoch
-}, f"adaptive_pinns_DI{D_I}_beta{beta_val}.pth")
+}, f"adaptive_pinns_DI{D_I}_beta{beta_val}_{job_id}.pth")
 
 
