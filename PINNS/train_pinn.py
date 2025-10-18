@@ -143,40 +143,24 @@ class FireSpread_PINN(nn.Module):
         return pde_loss, temporal_loss
 
     # -------------------- PÉRDIDA POR LOS DATOS --------------------#
-    def loss_data(self, t_data, S_data, I_data, R_data):
-        nx, ny = S_data.shape
+    def loss_data(self, S_list, I_list, R_list, t_list):
+        """
+        S_list, I_list, R_list: listas de tensores de forma [Nx, Ny] para cada tiempo
+        t_list: lista de valores de tiempo correspondientes
+        """
+        total_loss = 0.0
+        for S, I, R, t_val in zip(S_list, I_list, R_list, t_list):
+            Nx, Ny = S.shape
+            x = torch.linspace(0, domain_size, Nx, device=device).unsqueeze(1).repeat(1, Ny).flatten()[:, None]
+            y = torch.linspace(0, domain_size, Ny, device=device).unsqueeze(0).repeat(Nx, 1).flatten()[:, None]
+            t = torch.full_like(x, t_val)
 
-        # construimos la grilla espacial según los límites
-        x = torch.linspace(0, domain_size, nx, device=device)
-        y = torch.linspace(0, domain_size, ny, device=device)
-        X, Y = torch.meshgrid(x, y, indexing='ij')
-
-        # aplanamos
-        x_flat = X.flatten().unsqueeze(1)
-        y_flat = Y.flatten().unsqueeze(1)
-
-        # aseguramos que t tenga la misma longitud
-        if torch.is_tensor(t_data):
-            t_flat = torch.full_like(x_flat, t_data.item())  # si es tensor escalar
-        else:
-            t_flat = torch.full_like(x_flat, t_data)
-
-        # flatten de los datos
-        S_flat = S_data.flatten().unsqueeze(1)
-        I_flat = I_data.flatten().unsqueeze(1)
-        R_flat = R_data.flatten().unsqueeze(1)
-
-        # predicción del modelo
-        S_pred, I_pred, R_pred = self.forward(x_flat, y_flat, t_flat)
-
-        # pérdida MSE sobre los datos
-        loss = (
-            F.mse_loss(S_pred, S_flat) +
-            F.mse_loss(I_pred, I_flat) +
-            F.mse_loss(R_pred, R_flat)
-        )
-
-        return loss
+            S_pred, I_pred, R_pred = self.forward(x, y, t)
+            total_loss += F.mse_loss(S_pred, S.flatten()[:, None]) \
+                        + F.mse_loss(I_pred, I.flatten()[:, None]) \
+                        + F.mse_loss(R_pred, R.flatten()[:, None])
+    
+        return total_loss
 
     # -------------------- PÉRDIDA POR NO NEGATIVIDAD --------------------#
     def non_negative_loss(self, x, y, t):
@@ -347,6 +331,8 @@ def train_pinn(modo='forward',
 
     temporal_weights = torch.ones(N_blocks, device=device)
 
+    D_I_history = []
+
     print(f"Entrenando PINNs con D = {self.D_I}, beta = {self.beta}, gamma = {self.gamma}")
 
     for epoch in range(start_epoch, epochs_adam):
@@ -400,13 +386,25 @@ def train_pinn(modo='forward',
         loss_bc_list.append(loss_bc.item())
         loss_data_list.append(loss_data.item())
 
+        # -------------------- Guardar D_I --------------------
+        if model.mode == 'inverse':
+            # Si D_I es un nn.Parameter, .item() obtiene su valor como float
+            D_I_history.append(model.D_I.item())
+        else:
+            D_I_history.append(model.D_I)  # modo forward, valor fijo
+
         # 📌 Guardar el mejor modelo
         if total_loss.item() < best_loss:
             best_loss = total_loss.item()
             best_model_state = copy.deepcopy({k: v.cpu() for k, v in model.state_dict().items()}) # Transfiere el modelo a la CPU
 
         if epoch % 100 == 0 or epoch == epochs_adam - 1:
-            print(f"Adam Época {epoch} | Loss: {total_loss.item()} | PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | BC Loss: {loss_bc.item()}")
+            print(
+                f"Adam Época {epoch} | Loss: {total_loss.item()} | "
+                f"PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | "
+                f"BC Loss: {loss_bc.item()} | "
+                f"D_I: {model.D_I.item() if model.mode == 'inverse' else model.D_I}"
+            )
 
         last_epoch = epoch
 
@@ -414,6 +412,7 @@ def train_pinn(modo='forward',
     np.save("loss_ic.npy", np.array(loss_ic_list))
     np.save("loss_bc.npy", np.array(loss_bc_list))
     np.save("loss_data.npy", np.array(loss_data_list))
+    np.save("D_I_history.npy", np.array(D_I_history))
 
     # Restaurar el mejor modelo en memoria
     if best_model_state is not None:

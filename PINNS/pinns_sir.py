@@ -1,6 +1,7 @@
 import torch # type: ignore
 from train_pinn import train_pinn, domain_size
 import sys
+import numpy as np
 
 # Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -19,7 +20,7 @@ epochs_adam = 10000
 # D_I = float(sys.argv[1])
 # beta_val = float(sys.argv[2])
 beta_val = 1.0
-D_I = 0.005
+D_I = 0.0001 # valor inicial para el problema inverso
 
 ############################## CARGADO DE LOS DATOS PARA EL PROBLEMA INVERSO ###############################################
 
@@ -45,7 +46,7 @@ def load_SIR_data(time_points, data_dir='_numpy_D0.0005_beta1.0_gamma0.3_t'):
     return S_data_list, I_data_list, R_data_list, t_data_list
 
 # --- Cargar datos para los tiempos que te interesen ---
-time_points = [1, 5, 10]
+time_points = [1.0, 5.0, 10.0]
 S_data_list, I_data_list, R_data_list, t_data_list = load_SIR_data(time_points)
 
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
@@ -54,7 +55,19 @@ start_time = torch.cuda.Event(enable_timing=True)
 end_time = torch.cuda.Event(enable_timing=True)
 
 start_time.record()
-model, optimizer, best_loss, last_epoch = train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=epochs_adam)
+model, optimizer, best_loss, last_epoch = train_pinn(
+    modo = 'inverse',
+    beta_val = beta_val,
+    gamma_val = gamma_val,
+    D_I = D_I,
+    mean_x=mean_x, mean_y=mean_y,
+    sigma_x=sigma_x, sigma_y=sigma_y,
+    epochs_adam=epochs_adam,
+    t_data=t_data_list,
+    S_data=S_data_list,
+    I_data=I_data_list,
+    R_data=R_data_list
+)
 end_time.record()
 
 # Sincronizar para asegurar medición correcta
