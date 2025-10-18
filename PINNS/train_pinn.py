@@ -245,7 +245,8 @@ class FireSpread_PINN(nn.Module):
 ############################## ENTRENAMIENTO ###############################################
 
 # Función para entrenar la PINN con ecuaciones de propagación de fuego
-def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10, checkpoint_path=None):
+def train_pinn(mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10, checkpoint_path=None, 
+               x_data=None, y_data=None, t_data=None, S_data=None, I_data=None, R_data=None):
     model = FireSpread_PINN().to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
@@ -302,7 +303,7 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
 
     temporal_weights = torch.ones(N_blocks, device=device)
 
-    print(f"Entrenando PINNs con D = {D_I}, beta = {beta_val}, gamma = {gamma_val}")
+    print(f"Entrenando PINNs con D = {self.D_I}, beta = {self.beta}, gamma = {self.gamma}")
 
     for epoch in range(start_epoch, epochs_adam):
         if epoch % 500 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
@@ -327,10 +328,11 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
         data = {
             'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
             'bc': (y_top, y_bottom, x_left, x_right, x_boundary, y_boundary, t_boundary),
-            'phys': (x_interior, y_interior, t_interior)
+            'phys': (x_interior, y_interior, t_interior),
+            'data': (x_data, y_data, t_data, S_data, I_data, R_data) if model.mode == 'inverse' else None,
         }
 
-        params = (D_I, beta_val, gamma_val, temporal_weights, N_blocks)
+        params = (self.D_I, self.beta, self.gamma, temporal_weights, N_blocks)
 
         total_loss, loss_phys, loss_ic, loss_bc, temporal_losses = model.closure(optimizer, data, params)
 
