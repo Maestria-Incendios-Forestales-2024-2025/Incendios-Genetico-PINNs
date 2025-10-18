@@ -362,7 +362,7 @@ def train_pinn(modo='forward',
             'data': (t_data, S_data, I_data, R_data) if model.mode == 'inverse' else None,
         }
 
-        params = (model.D_I, model.beta, model.gamma, temporal_weights, N_blocks)
+        params = (temporal_weights, N_blocks)
 
         total_loss, loss_phys, loss_ic, loss_bc, loss_data, temporal_losses = model.closure(optimizer, data, params)
 
