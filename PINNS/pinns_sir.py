@@ -21,6 +21,33 @@ epochs_adam = 10000
 beta_val = 1.0
 D_I = 0.005
 
+############################## CARGADO DE LOS DATOS PARA EL PROBLEMA INVERSO ###############################################
+
+# Función para cargar S, I, R en varios tiempos
+def load_SIR_data(time_points, data_dir='_numpy_D0.0005_beta1.0_gamma0.3_t'):
+    S_data_list, I_data_list, R_data_list, t_data_list = [], [], [], []
+    
+    for t in time_points:
+        S = np.load(f"S{data_dir}{t}.npy")
+        I = np.load(f"I{data_dir}{t}.npy")
+        R = np.load(f"R{data_dir}{t}.npy")
+        
+        # Convertir a tensores
+        S = torch.tensor(S, dtype=torch.float32, device=device)
+        I = torch.tensor(I, dtype=torch.float32, device=device)
+        R = torch.tensor(R, dtype=torch.float32, device=device)
+        
+        S_data_list.append(S)
+        I_data_list.append(I)
+        R_data_list.append(R)
+        t_data_list.append(torch.full_like(S, fill_value=t, dtype=torch.float32))  # mismo tamaño que S
+    
+    return S_data_list, I_data_list, R_data_list, t_data_list
+
+# --- Cargar datos para los tiempos que te interesen ---
+time_points = [1, 5, 10]
+S_data_list, I_data_list, R_data_list, t_data_list = load_SIR_data(time_points)
+
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
 
 start_time = torch.cuda.Event(enable_timing=True)

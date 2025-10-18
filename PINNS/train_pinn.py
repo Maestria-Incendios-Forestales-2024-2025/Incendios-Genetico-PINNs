@@ -276,9 +276,22 @@ class FireSpread_PINN(nn.Module):
 ############################## ENTRENAMIENTO ###############################################
 
 # Función para entrenar la PINN con ecuaciones de propagación de fuego
-def train_pinn(mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10, checkpoint_path=None, 
-               x_data=None, y_data=None, t_data=None, S_data=None, I_data=None, R_data=None):
-    model = FireSpread_PINN().to(device)
+def train_pinn(modo='forward',
+               beta_val=1.0,
+               gamma_val=0.3,
+               D_I=0.005,
+               mean_x=None, mean_y=None, sigma_x=None, sigma_y=None,
+               epochs_adam=1000, N_blocks=10,
+               checkpoint_path=None,
+               t_data=None, S_data=None, I_data=None, R_data=None):
+
+    model = FireSpread_PINN(
+        modo=modo,
+        beta=beta_val,
+        gamma=gamma_val,
+        D_I=D_I
+    ).to(device)
+    
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     # Cargando checkpoint
@@ -326,8 +339,8 @@ def train_pinn(mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10, 
     x_boundary = domain_size*torch.rand(N_boundary, 1, device=device) # x en (0, 1)
     y_boundary = domain_size*torch.rand(N_boundary, 1, device=device) # y en (0, 1)
     t_boundary = temporal_domain*torch.rand(N_boundary, 1, device=device) # t en (0, 1)
-    
-    loss_phys_list, loss_bc_list, loss_ic_list = [], [], []
+
+    loss_phys_list, loss_bc_list, loss_ic_list, loss_data_list = [], [], [], []
 
     best_loss = float('inf')
     best_model_state = None
@@ -360,12 +373,12 @@ def train_pinn(mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10, 
             'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
             'bc': (y_top, y_bottom, x_left, x_right, x_boundary, y_boundary, t_boundary),
             'phys': (x_interior, y_interior, t_interior),
-            'data': (x_data, y_data, t_data, S_data, I_data, R_data) if model.mode == 'inverse' else None,
+            'data': (t_data, S_data, I_data, R_data) if model.mode == 'inverse' else None,
         }
 
         params = (self.D_I, self.beta, self.gamma, temporal_weights, N_blocks)
 
-        total_loss, loss_phys, loss_ic, loss_bc, temporal_losses = model.closure(optimizer, data, params)
+        total_loss, loss_phys, loss_ic, loss_bc, loss_data, temporal_losses = model.closure(optimizer, data, params)
 
         # Actualización de pesos temporales (con normalización para estabilidad)
         partial_sums = torch.cumsum(temporal_losses.detach(), dim=0)  # sumatoria acumulada por bloques
@@ -385,6 +398,7 @@ def train_pinn(mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10, 
         loss_phys_list.append(loss_phys.item())
         loss_ic_list.append(loss_ic.item())
         loss_bc_list.append(loss_bc.item())
+        loss_data_list.append(loss_data.item())
 
         # 📌 Guardar el mejor modelo
         if total_loss.item() < best_loss:
@@ -399,6 +413,7 @@ def train_pinn(mean_x, mean_y, sigma_x, sigma_y, epochs_adam=1000, N_blocks=10, 
     np.save("loss_phys.npy", np.array(loss_phys_list))
     np.save("loss_ic.npy", np.array(loss_ic_list))
     np.save("loss_bc.npy", np.array(loss_bc_list))
+    np.save("loss_data.npy", np.array(loss_data_list))
 
     # Restaurar el mejor modelo en memoria
     if best_model_state is not None:
