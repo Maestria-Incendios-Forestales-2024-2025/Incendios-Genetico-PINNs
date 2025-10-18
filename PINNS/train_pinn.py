@@ -143,9 +143,40 @@ class FireSpread_PINN(nn.Module):
         return pde_loss, temporal_loss
 
     # -------------------- PÉRDIDA POR LOS DATOS --------------------#
-    def loss_data(self, x_data, y_data, t_data, S_data, I_data, R_data):
-        S_pred, I_pred, R_pred = self.forward(x_data, y_data, t_data)
-        return F.mse_loss(S_pred, S_data) + F.mse_loss(I_pred, I_data) + F.mse_loss(R_pred, R_data)
+    def loss_data(self, t_data, S_data, I_data, R_data):
+        nx, ny = S_data.shape
+
+        # construimos la grilla espacial según los límites
+        x = torch.linspace(0, domain_size, nx, device=device)
+        y = torch.linspace(0, domain_size, ny, device=device)
+        X, Y = torch.meshgrid(x, y, indexing='ij')
+
+        # aplanamos
+        x_flat = X.flatten().unsqueeze(1)
+        y_flat = Y.flatten().unsqueeze(1)
+
+        # aseguramos que t tenga la misma longitud
+        if torch.is_tensor(t_data):
+            t_flat = torch.full_like(x_flat, t_data.item())  # si es tensor escalar
+        else:
+            t_flat = torch.full_like(x_flat, t_data)
+
+        # flatten de los datos
+        S_flat = S_data.flatten().unsqueeze(1)
+        I_flat = I_data.flatten().unsqueeze(1)
+        R_flat = R_data.flatten().unsqueeze(1)
+
+        # predicción del modelo
+        S_pred, I_pred, R_pred = self.forward(x_flat, y_flat, t_flat)
+
+        # pérdida MSE sobre los datos
+        loss = (
+            F.mse_loss(S_pred, S_flat) +
+            F.mse_loss(I_pred, I_flat) +
+            F.mse_loss(R_pred, R_flat)
+        )
+
+        return loss
 
     # -------------------- PÉRDIDA POR NO NEGATIVIDAD --------------------#
     def non_negative_loss(self, x, y, t):
