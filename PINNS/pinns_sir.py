@@ -13,13 +13,13 @@ gamma_val = 0.3
 domain_size = 2
 mean_x, mean_y = domain_size / 2, domain_size / 2
 sigma_x, sigma_y = 0.05, 0.05
-epochs_adam = 10000
+epochs_adam = 40000
 
 # Parámetros variables (desde línea de comandos)
 # D_I = float(sys.argv[1])
 # beta_val = float(sys.argv[2])
-beta_val = 1.0
-D_I = 0.005
+beta_val = 0.8
+D_I = 0.0005
 
 job_id = os.environ.get("SLURM_JOB_ID", None)
 
