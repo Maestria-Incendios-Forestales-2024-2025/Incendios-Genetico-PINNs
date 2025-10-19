@@ -108,34 +108,34 @@ class FireSpread_PINN(nn.Module):
 
                 # Predicción de la red
                 # SIR_pred = self.forward(x_block, y_block, t_block)
-                SIR_pred = self.forward(x_phys, y_phys, t_phys)
-                S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
+        SIR_pred = self.forward(x_phys, y_phys, t_phys)
+        S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
 
                 # Derivadas temporales
                 # dS_dt = torch.autograd.grad(S_pred, t_block, torch.ones_like(S_pred), create_graph=True)[0]
                 # dI_dt = torch.autograd.grad(I_pred, t_block, torch.ones_like(I_pred), create_graph=True)[0]
                 # dR_dt = torch.autograd.grad(R_pred, t_block, torch.ones_like(R_pred), create_graph=True)[0]
-                dS_dt = torch.autograd.grad(S_pred, t_phys, torch.ones_like(S_pred), create_graph=True)[0]
-                dI_dt = torch.autograd.grad(I_pred, t_phys, torch.ones_like(I_pred), create_graph=True)[0]
-                dR_dt = torch.autograd.grad(R_pred, t_phys, torch.ones_like(R_pred), create_graph=True)[0]
+        dS_dt = torch.autograd.grad(S_pred, t_phys, torch.ones_like(S_pred), create_graph=True)[0]
+        dI_dt = torch.autograd.grad(I_pred, t_phys, torch.ones_like(I_pred), create_graph=True)[0]
+        dR_dt = torch.autograd.grad(R_pred, t_phys, torch.ones_like(R_pred), create_graph=True)[0]
 
                 # Derivadas espaciales
                 # dI_dx = torch.autograd.grad(I_pred, x_block, torch.ones_like(I_pred), create_graph=True)[0]
                 # dI_dy = torch.autograd.grad(I_pred, y_block, torch.ones_like(I_pred), create_graph=True)[0]
                 # d2I_dx2 = torch.autograd.grad(dI_dx, x_block, torch.ones_like(dI_dx), create_graph=True)[0]
                 # d2I_dy2 = torch.autograd.grad(dI_dy, y_block, torch.ones_like(dI_dy), create_graph=True)[0]
-                dI_dx = torch.autograd.grad(I_pred, x_phys, torch.ones_like(I_pred), create_graph=True)[0]
-                dI_dy = torch.autograd.grad(I_pred, y_phys, torch.ones_like(I_pred), create_graph=True)[0]
-                d2I_dx2 = torch.autograd.grad(dI_dx, x_phys, torch.ones_like(dI_dx), create_graph=True)[0]
-                d2I_dy2 = torch.autograd.grad(dI_dy, y_phys, torch.ones_like(dI_dy), create_graph=True)[0]
+        dI_dx = torch.autograd.grad(I_pred, x_phys, torch.ones_like(I_pred), create_graph=True)[0]
+        dI_dy = torch.autograd.grad(I_pred, y_phys, torch.ones_like(I_pred), create_graph=True)[0]
+        d2I_dx2 = torch.autograd.grad(dI_dx, x_phys, torch.ones_like(dI_dx), create_graph=True)[0]
+        d2I_dy2 = torch.autograd.grad(dI_dy, y_phys, torch.ones_like(dI_dy), create_graph=True)[0]
 
                 # Residuales PDE
-                loss_S = dS_dt + self.beta * S_pred * I_pred
-                loss_I = dI_dt - (self.beta * S_pred * I_pred - self.gamma * I_pred) - self.D_I * (d2I_dx2 + d2I_dy2)
-                loss_R = dR_dt - self.gamma * I_pred
+        loss_S = dS_dt + self.beta * S_pred * I_pred
+        loss_I = dI_dt - (self.beta * S_pred * I_pred - self.gamma * I_pred) - self.D_I * (d2I_dx2 + d2I_dy2)
+        loss_R = dR_dt - self.gamma * I_pred
 
-                block_loss = (loss_S**2 + loss_I**2 + loss_R**2).mean()
-
+                # block_loss = (loss_S**2 + loss_I**2 + loss_R**2).mean()
+        pde_loss = (loss_S**2 + loss_I**2 + loss_R**2).mean()
                 # Chequeo NaN/Inf
                 # if torch.isnan(block_loss) or torch.isinf(block_loss):
                     # print(f"Warning: NaN/Inf en bloque {i}, asignando 0")
