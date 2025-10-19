@@ -41,13 +41,12 @@ def load_SIR_data(time_points, data_dir='_numpy_D0.0005_beta1.0_gamma0.3_t'):
         S_data_list.append(S)
         I_data_list.append(I)
         R_data_list.append(R)
-        t_data_list.append(torch.full_like(S, fill_value=t, dtype=torch.float32))  # mismo tamaño que S
-    
-    return S_data_list, I_data_list, R_data_list, t_data_list
+
+    return S_data_list, I_data_list, R_data_list
 
 # --- Cargar datos para los tiempos que te interesen ---
 time_points = [1.0, 5.0, 10.0]
-S_data_list, I_data_list, R_data_list, t_data_list = load_SIR_data(time_points)
+S_data_list, I_data_list, R_data_list = load_SIR_data(time_points)
 
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
 
@@ -63,7 +62,7 @@ model, optimizer, best_loss, last_epoch = train_pinn(
     mean_x=mean_x, mean_y=mean_y,
     sigma_x=sigma_x, sigma_y=sigma_y,
     epochs_adam=epochs_adam,
-    t_data=t_data_list,
+    t_data=time_points,
     S_data=S_data_list,
     I_data=I_data_list,
     R_data=R_data_list

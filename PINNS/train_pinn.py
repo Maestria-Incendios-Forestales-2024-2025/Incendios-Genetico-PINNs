@@ -153,9 +153,10 @@ class FireSpread_PINN(nn.Module):
             Nx, Ny = S.shape
             x = torch.linspace(0, domain_size, Nx, device=device).unsqueeze(1).repeat(1, Ny).flatten()[:, None]
             y = torch.linspace(0, domain_size, Ny, device=device).unsqueeze(0).repeat(Nx, 1).flatten()[:, None]
-            t = torch.full_like(x, t_val)
+            t = torch.full_like(x, t_val, device=device)
 
-            S_pred, I_pred, R_pred = self.forward(x, y, t)
+            SIR_pred = self.forward(x, y, t)
+            S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
             total_loss += F.mse_loss(S_pred, S.flatten()[:, None]) \
                         + F.mse_loss(I_pred, I.flatten()[:, None]) \
                         + F.mse_loss(R_pred, R.flatten()[:, None])
@@ -333,7 +334,7 @@ def train_pinn(modo='forward',
 
     D_I_history = []
 
-    print(f"Entrenando PINNs con D = {model.D_I}, beta = {model.beta}, gamma = {model.gamma}")
+    # print(f"Entrenando PINNs con D = {model.D_I}, beta = {model.beta}, gamma = {model.gamma}")
 
     for epoch in range(start_epoch, epochs_adam):
         if epoch % 500 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
@@ -359,7 +360,7 @@ def train_pinn(modo='forward',
             'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
             'bc': (y_top, y_bottom, x_left, x_right, x_boundary, y_boundary, t_boundary),
             'phys': (x_interior, y_interior, t_interior),
-            'data': (t_data, S_data, I_data, R_data) if model.mode == 'inverse' else None,
+            'data': (S_data, I_data, R_data, t_data) if model.mode == 'inverse' else None,
         }
 
         params = (temporal_weights, N_blocks)
