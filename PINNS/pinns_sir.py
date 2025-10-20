@@ -14,7 +14,7 @@ gamma_val = 0.3
 domain_size = 2
 mean_x, mean_y = domain_size / 2, domain_size / 2
 sigma_x, sigma_y = 0.05, 0.05
-epochs_adam = 10000
+epochs_adam = 40000
 
 # Parámetros variables (desde línea de comandos)
 # D_I = float(sys.argv[1])
@@ -54,7 +54,7 @@ start_time = torch.cuda.Event(enable_timing=True)
 end_time = torch.cuda.Event(enable_timing=True)
 
 start_time.record()
-model, optimizer, best_loss, last_epoch = train_pinn(
+model, optimizer, best_loss, last_epoch, best_D_I = train_pinn(
     modo = 'inverse',
     beta_val = beta_val,
     gamma_val = gamma_val,
@@ -82,7 +82,8 @@ torch.save({
     'model_state_dict': model.state_dict(),
     'optimizer_state_dict': optimizer.state_dict(),
     'best_loss': best_loss,
-    'epoch': last_epoch
+    'epoch': last_epoch,
+    'D_I': best_D_I
 }, f"adaptive_pinns_DI{D_I}_beta{beta_val}.pth")
 
 

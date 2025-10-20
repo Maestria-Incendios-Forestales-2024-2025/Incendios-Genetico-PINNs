@@ -256,7 +256,7 @@ class FireSpread_PINN(nn.Module):
 
         optimizer.zero_grad()
         # Retener grafo para permitir autograd.grad en update_loss_weights
-        total_loss.backward(retain_graph=True)
+        total_loss.backward(retain_graph=False)
 
         return (
             total_loss.detach(),
@@ -290,6 +290,7 @@ def train_pinn(modo='forward',
 
     # Cargando checkpoint
     best_loss = float("inf")
+    best_model_state = None
     start_epoch = 0
 
     if checkpoint_path is not None and os.path.exists(checkpoint_path):
@@ -297,6 +298,7 @@ def train_pinn(modo='forward',
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         best_loss = checkpoint.get('best_loss', float('inf'))
+        best_model_state = copy.deepcopy({k: v.cpu() for k, v in model.state_dict().items()}) # Transfiere el modelo a la CPU
         start_epoch = checkpoint.get('epoch', 0) + 1
         print(f"🔄 Reanudando entrenamiento desde {checkpoint_path}, epoch {start_epoch}")
 
@@ -335,9 +337,6 @@ def train_pinn(modo='forward',
     t_boundary = temporal_domain*torch.rand(N_boundary, 1, device=device) # t en (0, 1)
 
     loss_phys_list, loss_bc_list, loss_ic_list, loss_data_list = [], [], [], []
-
-    best_loss = float('inf')
-    best_model_state = None
 
     temporal_weights = torch.ones(N_blocks, device=device)
 
@@ -391,6 +390,12 @@ def train_pinn(modo='forward',
 
         optimizer.step()
 
+        if model.mode == 'inverse':
+            with torch.no_grad():
+                # Asegurar que D_I se mantenga positivo
+                if model.D_I.item() < 0:
+                    model.D_I.data.clamp_(min=1e-6)
+
         # Guardar cada pérdida individual
         loss_phys_list.append(loss_phys.item())
         loss_ic_list.append(loss_ic.item())
@@ -408,7 +413,8 @@ def train_pinn(modo='forward',
         if total_loss.item() < best_loss:
             best_loss = total_loss.item()
             best_model_state = copy.deepcopy({k: v.cpu() for k, v in model.state_dict().items()}) # Transfiere el modelo a la CPU
-
+            if model.mode == 'inverse':
+                best_D_I = model.D_I.item()  # 🔹 Guardar el mejor D_I
         if epoch % 100 == 0 or epoch == epochs_adam - 1:
             print(
                 f"Adam Época {epoch} | Loss: {total_loss.item()} | "
@@ -430,4 +436,4 @@ def train_pinn(modo='forward',
         model.load_state_dict(best_model_state)
         model.eval()
 
-    return model, optimizer, best_loss, last_epoch
+    return model, optimizer, best_loss, last_epoch, best_D_I if model.mode == 'inverse' else None
