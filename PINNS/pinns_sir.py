@@ -86,4 +86,5 @@ torch.save({
     'D_I': best_D_I
 }, f"adaptive_pinns_DI{D_I}_beta{beta_val}.pth")
 
+print("Mejor D_I encontrado:", best_D_I)
 
