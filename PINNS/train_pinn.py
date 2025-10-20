@@ -67,67 +67,76 @@ class FireSpread_PINN(nn.Module):
     #---------------- PÉRDIDA POR LA FÍSICA ----------------#
     def loss_pde(self, x_phys, y_phys, t_phys, D_I, beta_val, gamma_val, temporal_weights, N_blocks):
         # Crear bloques temporales
-        T_final = temporal_domain
-        t_blocks = torch.linspace(0, T_final, N_blocks + 1, device=device)
+        # T_final = temporal_domain
+        # t_blocks = torch.linspace(0, T_final, N_blocks + 1, device=device)
 
         # Lista para pérdidas por bloque
-        block_losses = []
+        # block_losses = []
 
-        for i in range(N_blocks):
-            t_start, t_end = t_blocks[i].item(), t_blocks[i + 1].item()
+        # for i in range(N_blocks):
+            # t_start, t_end = t_blocks[i].item(), t_blocks[i + 1].item()
 
             # Máscara de puntos en el bloque temporal
-            t1 = t_phys.squeeze(-1)
-            mask = (t1 >= t_start) & ((t1 < t_end) | (i == N_blocks - 1))  # incluir último punto
-            idx_block = torch.nonzero(mask, as_tuple=False).squeeze(1)
-            if idx_block.numel() == 0:
-                print("No hay puntos en el bloque temporal")
-                block_loss = torch.tensor(0.0, device=device)
-            else:
+            # t1 = t_phys.squeeze(-1)
+            # mask = (t1 >= t_start) & ((t1 < t_end) | (i == N_blocks - 1))  # incluir último punto
+            # idx_block = torch.nonzero(mask, as_tuple=False).squeeze(1)
+            # if idx_block.numel() == 0:
+                # print("No hay puntos en el bloque temporal")
+                # block_loss = torch.tensor(0.0, device=device)
+            # else:
                 # Submuestreo para limitar uso de memoria
-                if idx_block.numel() > MAX_BLOCK_POINTS:
-                    perm = torch.randperm(idx_block.numel(), device=device)
-                    idx_block = idx_block[perm[:MAX_BLOCK_POINTS]]
+                # if idx_block.numel() > MAX_BLOCK_POINTS:
+                    # perm = torch.randperm(idx_block.numel(), device=device)
+                    # idx_block = idx_block[perm[:MAX_BLOCK_POINTS]]
 
-                x_block = x_phys[idx_block]
-                y_block = y_phys[idx_block]
-                t_block = t_phys[idx_block]
+                # x_block = x_phys[idx_block]
+                # y_block = y_phys[idx_block]
+                # t_block = t_phys[idx_block]
 
                 # Predicción de la red
-                SIR_pred = self.forward(x_block, y_block, t_block)
-                S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
+                # SIR_pred = self.forward(x_block, y_block, t_block)
+        SIR_pred = self.forward(x_phys, y_phys, t_phys)
+        S_pred, I_pred, R_pred = SIR_pred[:, 0:1], SIR_pred[:, 1:2], SIR_pred[:, 2:3]
 
                 # Derivadas temporales
-                dS_dt = torch.autograd.grad(S_pred, t_block, torch.ones_like(S_pred), create_graph=True)[0]
-                dI_dt = torch.autograd.grad(I_pred, t_block, torch.ones_like(I_pred), create_graph=True)[0]
-                dR_dt = torch.autograd.grad(R_pred, t_block, torch.ones_like(R_pred), create_graph=True)[0]
+                # dS_dt = torch.autograd.grad(S_pred, t_block, torch.ones_like(S_pred), create_graph=True)[0]
+                # dI_dt = torch.autograd.grad(I_pred, t_block, torch.ones_like(I_pred), create_graph=True)[0]
+                # dR_dt = torch.autograd.grad(R_pred, t_block, torch.ones_like(R_pred), create_graph=True)[0]
+        dS_dt = torch.autograd.grad(S_pred, t_phys, torch.ones_like(S_pred), create_graph=True)[0]
+        dI_dt = torch.autograd.grad(I_pred, t_phys, torch.ones_like(I_pred), create_graph=True)[0]
+        dR_dt = torch.autograd.grad(R_pred, t_phys, torch.ones_like(R_pred), create_graph=True)[0]
 
                 # Derivadas espaciales
-                dI_dx = torch.autograd.grad(I_pred, x_block, torch.ones_like(I_pred), create_graph=True)[0]
-                dI_dy = torch.autograd.grad(I_pred, y_block, torch.ones_like(I_pred), create_graph=True)[0]
-                d2I_dx2 = torch.autograd.grad(dI_dx, x_block, torch.ones_like(dI_dx), create_graph=True)[0]
-                d2I_dy2 = torch.autograd.grad(dI_dy, y_block, torch.ones_like(dI_dy), create_graph=True)[0]
+                # dI_dx = torch.autograd.grad(I_pred, x_block, torch.ones_like(I_pred), create_graph=True)[0]
+                # dI_dy = torch.autograd.grad(I_pred, y_block, torch.ones_like(I_pred), create_graph=True)[0]
+                # d2I_dx2 = torch.autograd.grad(dI_dx, x_block, torch.ones_like(dI_dx), create_graph=True)[0]
+                # d2I_dy2 = torch.autograd.grad(dI_dy, y_block, torch.ones_like(dI_dy), create_graph=True)[0]
+        dI_dx = torch.autograd.grad(I_pred, x_phys, torch.ones_like(I_pred), create_graph=True)[0]
+        dI_dy = torch.autograd.grad(I_pred, y_phys, torch.ones_like(I_pred), create_graph=True)[0]
+        d2I_dx2 = torch.autograd.grad(dI_dx, x_phys, torch.ones_like(dI_dx), create_graph=True)[0]
+        d2I_dy2 = torch.autograd.grad(dI_dy, y_phys, torch.ones_like(dI_dy), create_graph=True)[0]
 
                 # Residuales PDE
-                loss_S = dS_dt + beta_val * S_pred * I_pred
-                loss_I = dI_dt - (beta_val * S_pred * I_pred - gamma_val * I_pred) - D_I * (d2I_dx2 + d2I_dy2)
-                loss_R = dR_dt - gamma_val * I_pred
+        loss_S = dS_dt + beta_val * S_pred * I_pred
+        loss_I = dI_dt - (beta_val * S_pred * I_pred - gamma_val * I_pred) - D_I * (d2I_dx2 + d2I_dy2)
+        loss_R = dR_dt - gamma_val * I_pred
 
-                block_loss = (loss_S**2 + loss_I**2 + loss_R**2).mean()
-
+                # block_loss = (loss_S**2 + loss_I**2 + loss_R**2).mean()
+        pde_loss = (loss_S**2 + loss_I**2 + loss_R**2).mean()
                 # Chequeo NaN/Inf
-                if torch.isnan(block_loss) or torch.isinf(block_loss):
-                    print(f"Warning: NaN/Inf en bloque {i}, asignando 0")
-                    block_loss = torch.tensor(0.0, device=device)
+                # if torch.isnan(block_loss) or torch.isinf(block_loss):
+                    # print(f"Warning: NaN/Inf en bloque {i}, asignando 0")
+                    # block_loss = torch.tensor(0.0, device=device)
 
-            block_losses.append(block_loss)
+            # block_losses.append(block_loss)
 
         # Tensor con pérdidas por bloque
-        block_losses_tensor = torch.stack(block_losses)  # GPU
-        pde_loss = torch.sum(temporal_weights * block_losses_tensor) / N_blocks
-        temporal_loss = block_losses_tensor.detach()  # detach para usar en re-pesado temporal sin grafo
+        # block_losses_tensor = torch.stack(block_losses)  # GPU
+        # pde_loss = torch.sum(temporal_weights * block_losses_tensor) / N_blocks
+        # temporal_loss = block_losses_tensor.detach()  # detach para usar en re-pesado temporal sin grafo
 
-        return pde_loss, temporal_loss
+        # return pde_loss, temporal_loss
+        return pde_loss
 
     # -------------------- PÉRDIDA POR NO NEGATIVIDAD --------------------
     def non_negative_loss(self, x, y, t):
@@ -201,8 +210,8 @@ class FireSpread_PINN(nn.Module):
         # calcular pérdidas
         loss_ic = self.loss_initial_condition(*data['ic'])
         loss_bc = self.loss_boundary_condition(*data['bc'])
-        loss_phys, temporal_losses = self.loss_pde(*data['phys'], *params)
-
+        # loss_phys, temporal_losses = self.loss_pde(*data['phys'], *params)
+        loss_phys = self.loss_pde(*data['phys'], *params)
         # combinación lineal con los pesos
         total_loss = self.w_ic * loss_ic + self.w_bc * loss_bc + self.w_pde * loss_phys
 
@@ -215,7 +224,7 @@ class FireSpread_PINN(nn.Module):
             loss_phys,  # no detach: se necesita el grafo para autograd.grad
             loss_ic,    # no detach
             loss_bc,    # no detach
-            temporal_losses.detach(),
+            # temporal_losses.detach(),
         )
 
 ############################## ENTRENAMIENTO ###############################################
@@ -312,13 +321,14 @@ def train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epoch
 
         params = (D_I, beta_val, gamma_val, temporal_weights, N_blocks)
 
-        total_loss, loss_phys, loss_ic, loss_bc, temporal_losses = model.closure(optimizer, data, params)
+        # total_loss, loss_phys, loss_ic, loss_bc, temporal_losses = model.closure(optimizer, data, params)
+        total_loss, loss_phys, loss_ic, loss_bc = model.closure(optimizer, data, params)
 
         # Actualización de pesos temporales (con normalización para estabilidad)
-        partial_sums = torch.cumsum(temporal_losses.detach(), dim=0)  # sumatoria acumulada por bloques
-        temporal_weights = torch.exp(-partial_sums)                   # exp(-sum) por bloque
-        temporal_weights[0] = 1.0
-        temporal_weights = temporal_weights / (temporal_weights.mean() + 1e-12)
+        # partial_sums = torch.cumsum(temporal_losses.detach(), dim=0)  # sumatoria acumulada por bloques
+        # temporal_weights = torch.exp(-partial_sums)                   # exp(-sum) por bloque
+        # temporal_weights[0] = 1.0
+        # temporal_weights = temporal_weights / (temporal_weights.mean() + 1e-12)
 
         # Actualización de pesos (usar el grafo antes del step)
         # if epoch % 1000 == 0 and epoch > 0:

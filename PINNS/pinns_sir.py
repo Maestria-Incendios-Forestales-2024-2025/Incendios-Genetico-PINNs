@@ -13,13 +13,13 @@ gamma_val = 0.3
 domain_size = 2
 mean_x, mean_y = domain_size / 2, domain_size / 2
 sigma_x, sigma_y = 0.05, 0.05
-epochs_adam = 10000
+epochs_adam = 40000
 
 # Parámetros variables (desde línea de comandos)
 # D_I = float(sys.argv[1])
 # beta_val = float(sys.argv[2])
-beta_val = 1.0
-D_I = 0.005
+beta_val = 0.8
+D_I = 0.0005
 
 job_id = os.environ.get("SLURM_JOB_ID", None)
 
@@ -29,8 +29,7 @@ start_time = torch.cuda.Event(enable_timing=True)
 end_time = torch.cuda.Event(enable_timing=True)
 
 start_time.record()
-model, optimizer, best_loss, last_epoch = train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=epochs_adam,
-                                                    checkpoint_path=f"adaptive_pinns_DI{D_I}_beta{beta_val}_1131173.pth")
+model, optimizer, best_loss, last_epoch = train_pinn(D_I, beta_val, gamma_val, mean_x, mean_y, sigma_x, sigma_y, epochs_adam=epochs_adam)
 end_time.record()
 
 # Sincronizar para asegurar medición correcta
