@@ -193,25 +193,33 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
         if not cp.any(simulaciones_validas):
             print(f"Todas las simulaciones explotaron en el paso {t+1}")
 
-    # Calcular fitness para cada simulación en paralelo
-    fitness_values = []
-    
-    # Crear máscaras para celdas quemadas (todo el batch de una vez)
-    burnt_cells_sim_batch = cp.where(R_batch > 0.001, 1, 0)  # Shape: (batch_size, ny, nx)
-    
-    # Expandir burnt_cells para el batch
+    # ==========================
+    # DEBUG FINAL DE VALORES
+    # ==========================
+    print("\n[DEBUG] Resumen final de la simulación:")
+    print(f"  - Simulaciones válidas restantes: {int(cp.sum(simulaciones_validas).get())}/{batch_size}")
+
+    for name, arr in [("S", S_batch), ("I", I_batch), ("R", R_batch)]:
+        print(f"  - {name}: min={float(cp.min(arr).get()):.4f}, "
+              f"max={float(cp.max(arr).get()):.4f}, "
+              f"mean={float(cp.mean(arr).get()):.4f}")
+
+    if cp.any(paso_explosion >= 0):
+        pasos_host = paso_explosion.get()
+        print(f"  - Simulaciones que explotaron: {int(cp.sum(pasos_host >= 0))}")
+        print(f"  - Primeras explosiones en pasos: {sorted(set(pasos_host[pasos_host >= 0]))[:5]}")
+
+    # Calcular fitness
+    burnt_cells_sim_batch = cp.where(R_batch > 0.001, 1, 0)
     burnt_cells_expanded = cp.broadcast_to(burnt_cells[cp.newaxis, :, :], (batch_size, ny, nx))
-    
-    # Calcular unión e intersección para todo el batch
-    union_batch = cp.sum(burnt_cells_expanded | burnt_cells_sim_batch, axis=(1, 2))  # Shape: (batch_size,)
-    interseccion_batch = cp.sum(burnt_cells_expanded & burnt_cells_sim_batch, axis=(1, 2))  # Shape: (batch_size,)
-    
-    # Calcular fitness para todo el batch
+    union_batch = cp.sum(burnt_cells_expanded | burnt_cells_sim_batch, axis=(1, 2))
+    interseccion_batch = cp.sum(burnt_cells_expanded & burnt_cells_sim_batch, axis=(1, 2))
     burnt_cells_total = cp.sum(burnt_cells)
     fitness_batch = (union_batch - interseccion_batch) / burnt_cells_total
 
-    # Procesar resultados
-    for i in range(batch_size):
-        fitness_values.append(float(fitness_batch[i]))
+    fitness_values = [float(fitness_batch[i]) for i in range(batch_size)]
+
+    print(f"[DEBUG] Fitness (primeros 5): {fitness_values[:5]}")
+    print("[DEBUG] Fin de aptitud_batch.\n")
 
     return fitness_values
