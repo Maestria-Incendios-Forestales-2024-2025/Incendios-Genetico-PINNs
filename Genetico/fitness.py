@@ -157,7 +157,9 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
 
     print(f'Numero de pasos a simular: {num_steps}')
     paso_explosion = cp.full(batch_size, -1, dtype=cp.int32)  # -1 significa no explotó
-    
+
+    printed_all_exploded = False  # <-- flag para imprimir solo una vez
+
     for t in range(num_steps):
         # Llamar al kernel con todos los parámetros necesarios
         spread_infection_adi(
@@ -189,9 +191,10 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
         # Actualizar estado de validez
         simulaciones_validas &= validas & (~valores_extremos)
         
-        # Si todas las simulaciones explotaron, terminar
-        if not cp.any(simulaciones_validas):
-            print(f"Todas las simulaciones explotaron en el paso {t+1}")
+        # ✅ Solo imprime una vez si todas explotan
+        if not printed_all_exploded and not cp.any(simulaciones_validas):
+            print(f"[DEBUG] Todas las simulaciones explotaron en el paso {t+1}")
+            printed_all_exploded = True
 
     # ==========================
     # DEBUG FINAL DE VALORES
