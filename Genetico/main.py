@@ -52,7 +52,11 @@ h_dy_mapa = datos["h_dy"]
 # ruta_incendio_referencia = rutas[exp]
 # print(f"Leyendo mapa de incendio de referencia: {os.path.basename(ruta_incendio_referencia)}")
 
-ruta_incendio_referencia = "/home/lbecerra/Incendios-Genetico-PINNs/mapas_steffen_martin/area_quemada_SM.asc"
+if "ccad.unc.edu.ar" in hostname:
+    ruta_incendio_referencia = "/home/lbecerra/Incendios-Genetico-PINNs/mapas_steffen_martin/area_quemada_SM.asc"
+else: 
+    ruta_incendio_referencia = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/area_quemada_SM.asc"
+    
 
 ############################## CARGA DE ARCHIVO PREENTRENADO ####################################
 

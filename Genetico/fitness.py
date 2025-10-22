@@ -192,7 +192,6 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
         # Si todas las simulaciones explotaron, terminar
         if not cp.any(simulaciones_validas):
             print(f"Todas las simulaciones explotaron en el paso {t+1}")
-            break
 
     # Calcular fitness para cada simulación en paralelo
     fitness_values = []
