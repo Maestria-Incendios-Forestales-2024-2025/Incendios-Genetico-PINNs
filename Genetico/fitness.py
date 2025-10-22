@@ -199,10 +199,12 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
         simulaciones_validas &= validas & (~valores_extremos)
         
         # ✅ Solo imprime una vez si todas explotan (solo en modo debug)
-        if debug:
-            if not printed_all_exploded and not cp.any(simulaciones_validas):
+        if not cp.any(simulaciones_validas):
+            if debug and not printed_all_exploded:
                 print(f"[DEBUG] Todas las simulaciones explotaron en el paso {t+1}")
                 printed_all_exploded = True
+            # Cortamos temprano si ya no queda ninguna simulación válida
+            break
 
     # ==========================
     # DEBUG FINAL DE VALORES
@@ -216,10 +218,81 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
                   f"max={float(cp.max(arr).get()):.4f}, "
                   f"mean={float(cp.mean(arr).get()):.4f}")
 
+        # Traemos a host siempre para usarlo también en el detalle por simulación
+        pasos_host = paso_explosion.get()
         if cp.any(paso_explosion >= 0):
-            pasos_host = paso_explosion.get()
-            print(f"  - Simulaciones que explotaron: {int(cp.sum(pasos_host >= 0))}")
+            print(f"  - Simulaciones que explotaron: {int((pasos_host >= 0).sum())}")
             print(f"  - Primeras explosiones en pasos: {sorted(set(pasos_host[pasos_host >= 0]))[:5]}")
+
+        # Detalle por simulación para detectar NaN y rangos por campo
+        print("\n[DEBUG] Detalle por simulación (min/max y NaN):")
+        # Cálculo vectorizado en GPU
+        s_min = cp.min(S_batch, axis=(1, 2))
+        s_max = cp.max(S_batch, axis=(1, 2))
+        i_min = cp.min(I_batch, axis=(1, 2))
+        i_max = cp.max(I_batch, axis=(1, 2))
+        r_min = cp.min(R_batch, axis=(1, 2))
+        r_max = cp.max(R_batch, axis=(1, 2))
+
+        s_has_nan = cp.any(cp.isnan(S_batch), axis=(1, 2))
+        i_has_nan = cp.any(cp.isnan(I_batch), axis=(1, 2))
+        r_has_nan = cp.any(cp.isnan(R_batch), axis=(1, 2))
+
+        # Transferencia a host en bloque
+        s_min_h = s_min.get(); s_max_h = s_max.get()
+        i_min_h = i_min.get(); i_max_h = i_max.get()
+        r_min_h = r_min.get(); r_max_h = r_max.get()
+        s_nan_h = s_has_nan.get(); i_nan_h = i_has_nan.get(); r_nan_h = r_has_nan.get()
+
+        # Conteo de NaNs por campo
+        print(f"  - Conteo NaN: S={int(s_nan_h.sum())}, I={int(i_nan_h.sum())}, R={int(r_nan_h.sum())}")
+        for idx in range(batch_size):
+            print(
+                f"    Sim {idx:>3}: "
+                f"S[min={s_min_h[idx]:.4g}, max={s_max_h[idx]:.4g}, nan={bool(s_nan_h[idx])}] | "
+                f"I[min={i_min_h[idx]:.4g}, max={i_max_h[idx]:.4g}, nan={bool(i_nan_h[idx])}] | "
+                f"R[min={r_min_h[idx]:.4g}, max={r_max_h[idx]:.4g}, nan={bool(r_nan_h[idx])}]"
+            )
+
+        # Parámetros de simulaciones problemáticas
+        print("\n[DEBUG] Parámetros de simulaciones problemáticas (NaN o explosión):")
+        any_printed = False
+        for idx in range(batch_size):
+            has_nan = bool(s_nan_h[idx] or i_nan_h[idx] or r_nan_h[idx])
+            exploded = pasos_host[idx] >= 0
+            if has_nan or exploded:
+                params = parametros_batch[idx]
+                # Intentamos formatear de manera amigable según la longitud de tupla
+                try:
+                    if isinstance(params, (list, tuple)):
+                        if len(params) == 7:
+                            Dp, Ap, Bp, xp, yp, betap, gammap = params
+                            pstr = (f"D={float(Dp):.4g}, A={float(Ap):.4g}, B={float(Bp):.4g}, "
+                                    f"x={int(xp)}, y={int(yp)}, beta={betap}, gamma={gammap}")
+                        elif len(params) == 5 and ajustar_beta_gamma:
+                            Dp, Ap, Bp, betas, gammas = params
+                            # betas/gammas pueden ser iterables; convertimos a lista plana corta
+                            try:
+                                betas_list = list(betas)
+                            except Exception:
+                                betas_list = [betas]
+                            try:
+                                gammas_list = list(gammas)
+                            except Exception:
+                                gammas_list = [gammas]
+                            pstr = (f"D={float(Dp):.4g}, A={float(Ap):.4g}, B={float(Bp):.4g}, "
+                                    f"betas={betas_list}, gammas={gammas_list}")
+                        else:
+                            pstr = str(params)
+                    else:
+                        pstr = str(params)
+                except Exception:
+                    pstr = str(params)
+                pe = int(pasos_host[idx]) if exploded else None
+                print(f"    Sim {idx:>3}: exploded_step={pe} | NaN={has_nan} | {pstr}")
+                any_printed = True
+        if not any_printed:
+            print("    (ninguna)")
 
     # Calcular fitness
     burnt_cells_sim_batch = cp.where(R_batch > 0.001, 1, 0)

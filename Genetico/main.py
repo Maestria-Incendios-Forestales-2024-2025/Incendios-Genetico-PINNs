@@ -102,8 +102,8 @@ elif exp == 3:
     ajustar_beta_gamma = True
     ajustar_ignicion = False
 
-    limite_beta = [(0.1, 10.0)] * 4
-    limite_gamma = [(0.1, 10.0)] * 4
+    limite_beta = [(0.1, 3.0)] * 4
+    limite_gamma = [(0.1, 3.0)] * 4
     limite_parametros = limite_parametros_base + limite_beta + limite_gamma
 
     ignicion_fija_x = [475, 565]
