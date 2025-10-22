@@ -30,7 +30,7 @@ h_dy_mapa = datos["h_dy"]
 ############################## INCENDIO DE REFERENCIA ####################################################
 
 # Detecto dónde estoy corriendo
-# hostname = socket.gethostname()
+hostname = socket.gethostname()
 # print(hostname)
 
 # if "rocks7frontend" in hostname or "compute" in hostname:
