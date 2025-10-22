@@ -105,12 +105,17 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamm
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS POR BATCH ###############################################
 
 def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None,
-                  ajustar_ignicion=True, ignicion_fija_x=None, ignicion_fija_y=None):
+                  ajustar_ignicion=True, ignicion_fija_x=None, ignicion_fija_y=None, debug=True):
     """
     Calcula el fitness para múltiples combinaciones de parámetros en paralelo.
     
     Args:
         parametros_batch: Lista de tuplas (D, A, B, x, y, beta_params, gamma_params)
+        burnt_cells: mapa binario de celdas quemadas de referencia (ny, nx) en CPU o GPU
+        num_steps: cantidad de pasos de simulación
+        ajustar_beta_gamma: si se ajustan beta/gamma (si no, se usan beta_fijo/gamma_fijo)
+        ajustar_ignicion: si se usan (x, y) por candidato (si no, ignición fija)
+        debug: si True, imprime información de depuración (costoso por transferencias CPU-GPU)
     
     Returns:
         Lista de valores de fitness
@@ -119,7 +124,8 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
     # Resto del código original...
     batch_size = len(parametros_batch)
 
-    print(f'Batch size: {batch_size}')
+    if debug:
+        print(f"[DEBUG] Batch size: {batch_size}")
     
     # Inicializar arrays para el batch
     S_batch = cp.ones((batch_size, ny, nx), dtype=cp.float32)
@@ -155,7 +161,8 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
     # Simular en paralelo
     simulaciones_validas = cp.ones(batch_size, dtype=cp.bool_)
 
-    print(f'Numero de pasos a simular: {num_steps}')
+    if debug:
+        print(f"[DEBUG] Numero de pasos a simular: {num_steps}")
     paso_explosion = cp.full(batch_size, -1, dtype=cp.int32)  # -1 significa no explotó
 
     printed_all_exploded = False  # <-- flag para imprimir solo una vez
@@ -191,26 +198,28 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
         # Actualizar estado de validez
         simulaciones_validas &= validas & (~valores_extremos)
         
-        # ✅ Solo imprime una vez si todas explotan
-        if not printed_all_exploded and not cp.any(simulaciones_validas):
-            print(f"[DEBUG] Todas las simulaciones explotaron en el paso {t+1}")
-            printed_all_exploded = True
+        # ✅ Solo imprime una vez si todas explotan (solo en modo debug)
+        if debug:
+            if not printed_all_exploded and not cp.any(simulaciones_validas):
+                print(f"[DEBUG] Todas las simulaciones explotaron en el paso {t+1}")
+                printed_all_exploded = True
 
     # ==========================
     # DEBUG FINAL DE VALORES
     # ==========================
-    print("\n[DEBUG] Resumen final de la simulación:")
-    print(f"  - Simulaciones válidas restantes: {int(cp.sum(simulaciones_validas).get())}/{batch_size}")
+    if debug:
+        print("\n[DEBUG] Resumen final de la simulación:")
+        print(f"  - Simulaciones válidas restantes: {int(cp.sum(simulaciones_validas).get())}/{batch_size}")
 
-    for name, arr in [("S", S_batch), ("I", I_batch), ("R", R_batch)]:
-        print(f"  - {name}: min={float(cp.min(arr).get()):.4f}, "
-              f"max={float(cp.max(arr).get()):.4f}, "
-              f"mean={float(cp.mean(arr).get()):.4f}")
+        for name, arr in [("S", S_batch), ("I", I_batch), ("R", R_batch)]:
+            print(f"  - {name}: min={float(cp.min(arr).get()):.4f}, "
+                  f"max={float(cp.max(arr).get()):.4f}, "
+                  f"mean={float(cp.mean(arr).get()):.4f}")
 
-    if cp.any(paso_explosion >= 0):
-        pasos_host = paso_explosion.get()
-        print(f"  - Simulaciones que explotaron: {int(cp.sum(pasos_host >= 0))}")
-        print(f"  - Primeras explosiones en pasos: {sorted(set(pasos_host[pasos_host >= 0]))[:5]}")
+        if cp.any(paso_explosion >= 0):
+            pasos_host = paso_explosion.get()
+            print(f"  - Simulaciones que explotaron: {int(cp.sum(pasos_host >= 0))}")
+            print(f"  - Primeras explosiones en pasos: {sorted(set(pasos_host[pasos_host >= 0]))[:5]}")
 
     # Calcular fitness
     burnt_cells_sim_batch = cp.where(R_batch > 0.001, 1, 0)
@@ -222,7 +231,8 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
 
     fitness_values = [float(fitness_batch[i]) for i in range(batch_size)]
 
-    print(f"[DEBUG] Fitness (primeros 5): {fitness_values[:5]}")
-    print("[DEBUG] Fin de aptitud_batch.\n")
+    if debug:
+        print(f"[DEBUG] Fitness (primeros 5): {fitness_values[:5]}")
+        print("[DEBUG] Fin de aptitud_batch.\n")
 
     return fitness_values
