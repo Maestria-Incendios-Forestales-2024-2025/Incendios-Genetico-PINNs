@@ -70,10 +70,13 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamm
                 mask = (vegetacion == veg_type)
                 
                 # Asignar valores si tenemos parámetros para este tipo
-                if j < len(beta_params) and j < len(gamma_params):
+                if j < len(beta_params) and j < len(gamma_params) and veg_type != 5:
                     beta_map = cp.where(mask, beta_params[j], beta_map)
                     gamma_map = cp.where(mask, gamma_params[j], gamma_map)
-        else: 
+                elif veg_type == 5:  # Tipo de vegetación 5
+                    beta_map = cp.where(mask, 1.0, beta_map)
+                    gamma_map = cp.where(mask, 0.5, gamma_map)
+        else: # Exp1
             beta_params = beta_fijo  # Lista de betas por tipo de vegetación
             gamma_params = gamma_fijo  # Lista de gammas por tipo de vegetación
             

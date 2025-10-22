@@ -1,8 +1,8 @@
-from Genetico.config import ruta_mapas
+from config import ruta_mapas
 import numpy as np # type: ignore
 import cupy as cp # type: ignore
 import csv, os
-from Genetico.operadores_geneticos import poblacion_inicial
+from operadores_geneticos import poblacion_inicial
 
 ############################## LEER MAPAS RASTER ###############################################
 
@@ -18,7 +18,7 @@ def leer_asc(ruta):
 def leer_incendio_referencia(ruta):
     _, extension = os.path.splitext(ruta)
     if extension == '.asc':
-        mapa_incendio_referencia = leer_asc(ruta)
+        mapa_incendio_referencia = cp.flipud(leer_asc(ruta))
     elif extension == '.npy':
         mapa_incendio_referencia = cp.load(ruta)
         if mapa_incendio_referencia.ndim == 3:
@@ -46,9 +46,6 @@ def preprocesar_datos():
 
     h_dx = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad)
     h_dy = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad)
-
-    # h_dx = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad - cp.pi/2)
-    # h_dy = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad - cp.pi/2)
 
     return {
         "vientod": cp.flipud(vientod),

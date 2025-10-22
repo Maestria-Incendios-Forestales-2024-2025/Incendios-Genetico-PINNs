@@ -94,8 +94,8 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
                 gammas = individuo[6]  # gamma
                 parametros_batch.append((D, A, B, x, y, betas, gammas))
             elif ajustar_beta_gamma and not ajustar_ignicion:   # Exp3
-                betas = individuo[3:8]
-                gammas = individuo[8:13]
+                betas = individuo[3:7] # Para el caso del incendio real tenemos 4 combustibles
+                gammas = individuo[7:12]
                 parametros_batch.append((D, A, B, betas, gammas))
             else:                                               # Exp1
                 x, y = int(individuo[3].item()), int(individuo[4].item())

@@ -8,6 +8,8 @@ import argparse
 
 print(cp.cuda.runtime.getDeviceProperties(0)['name'])
 
+cp.cuda.Device(0).use()
+
 # Obtengo la variable por línea de comando
 parser = argparse.ArgumentParser()
 parser.add_argument("--exp", type=int, default=1, help="Número de experimento")
@@ -28,27 +30,29 @@ h_dy_mapa = datos["h_dy"]
 ############################## INCENDIO DE REFERENCIA ####################################################
 
 # Detecto dónde estoy corriendo
-hostname = socket.gethostname()
-print(hostname)
+# hostname = socket.gethostname()
+# print(hostname)
 
-if "rocks7frontend" in hostname or "compute" in hostname:
-    base_cluster = "/home/lucas.becerra/Incendios-Genetico-PINNs/"
-    rutas = {
-        1: base_cluster + "R_referencia_1.npy",
-        2: base_cluster + "R_referencia_2.npy",
-        3: base_cluster + "R_referencia_3.npy",
-    }
-else:
-    base_local = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/"
-    rutas = {
-        1: base_local + "R_referencia_1.npy",
-        2: base_local + "R_referencia_2.npy",
-        3: base_local + "R_referencia_3.npy",
-    }
+# if "rocks7frontend" in hostname or "compute" in hostname:
+#     base_cluster = "/home/lucas.becerra/Incendios-Genetico-PINNs/"
+#     rutas = {
+#         1: base_cluster + "R_referencia_1.npy",
+#         2: base_cluster + "R_referencia_2.npy",
+#         3: base_cluster + "R_referencia_3.npy",
+#     }
+# else:
+#     base_local = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/"
+#     rutas = {
+#         1: base_local + "R_referencia_1.npy",
+#         2: base_local + "R_referencia_2.npy",
+#         3: base_local + "R_referencia_3.npy",
+#     }
 
 # Selecciono la ruta según EXP
-ruta_incendio_referencia = rutas[exp]
-print(f"Leyendo mapa de incendio de referencia: {os.path.basename(ruta_incendio_referencia)}")
+# ruta_incendio_referencia = rutas[exp]
+# print(f"Leyendo mapa de incendio de referencia: {os.path.basename(ruta_incendio_referencia)}")
+
+ruta_incendio_referencia = "/home/lbecerra/Incendios-Genetico-PINNs/mapas_steffen_martin/area_quemada_SM.asc"
 
 ############################## CARGA DE ARCHIVO PREENTRENADO ####################################
 
@@ -63,7 +67,7 @@ B_max = float(d / (cp.sqrt(2)*dt/2*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2)))) 
 ############################## DISEÑO DE EXPERIMENTOS ##########################################
 
 limite_parametros_base = [
-    (0.01, 100.0),          # D
+    (0.01, 200.0),          # D
     (0.0, A_max * cota),    # A
     (0.0, B_max * cota)     # B
 ]
@@ -89,16 +93,17 @@ elif exp == 2:
     limite_gamma = [(0.1, 0.9)]
     limite_parametros = limite_parametros_base + limite_ignicion + limite_beta + limite_gamma
 
+# Adapto el experimento 3 para ajustar el incendio real
 elif exp == 3:
     ajustar_beta_gamma = True
     ajustar_ignicion = False
 
-    limite_beta = [(0.1, 2.0)] * 5
-    limite_gamma = [(0.1, 0.9)] * 5
+    limite_beta = [(0.1, 10.0)] * 4
+    limite_gamma = [(0.1, 10.0)] * 4
     limite_parametros = limite_parametros_base + limite_beta + limite_gamma
 
-    ignicion_fija_x = [1130, 1300, 620]
-    ignicion_fija_y = [290, 150, 280]
+    ignicion_fija_x = [475, 565]
+    ignicion_fija_y = [550, 530]
 
 else:
     raise ValueError(f"Experimento {exp} no está definido")
@@ -111,12 +116,12 @@ start_time = time.time()
 
 resultados = genetic_algorithm(
     tamano_poblacion=10000,
-    generaciones=12,
+    generaciones=40,
     limite_parametros=limite_parametros,
     ruta_incendio_referencia=ruta_incendio_referencia,
     archivo_preentrenado=archivo_preentrenado,
     generacion_preentrenada=generacion_preentranada,
-    num_steps=500,
+    num_steps=1920,
     batch_size=5,
     ajustar_beta_gamma=ajustar_beta_gamma,
     beta_fijo=beta_fijo if not ajustar_beta_gamma else None,

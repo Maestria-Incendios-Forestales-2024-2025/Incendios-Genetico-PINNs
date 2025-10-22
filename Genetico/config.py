@@ -8,6 +8,9 @@ hostname = socket.gethostname()
 if "rocks7frontend" in hostname or "compute" in hostname:
     # Cluster
     base_path = "/home/lucas.becerra/Incendios-Genetico-PINNs/mapas_steffen_martin"
+elif "ccad.unc.edu.ar" in hostname:
+    # Nodo o frontend de Mendieta
+    base_path = "/home/lbecerra/Incendios-Genetico-PINNs/mapas_steffen_martin"
 else:
     # Local
     base_path = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin"

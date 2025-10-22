@@ -15,8 +15,10 @@ def poblacion_inicial(tamano_poblacion, limite_parametros):
     n_params = len(limite_parametros)
     
     # Genera números aleatorios uniformes en [0,1]
-    rand = cp.random.rand(tamano_poblacion, n_params, dtype=cp.float32)
-    
+    rs = cp.random.default_rng(seed=42)
+
+    rand = rs.random((tamano_poblacion, n_params), dtype=cp.float32)
+
     # Convierte límites a arrays
     lows  = cp.array([low for low, _ in limite_parametros], dtype=cp.float32)
     highs = cp.array([high for _, high in limite_parametros], dtype=cp.float32)
