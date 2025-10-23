@@ -119,7 +119,7 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 resultados = genetic_algorithm(
-    tamano_poblacion=10000,
+    tamano_poblacion=5000,
     generaciones=40,
     limite_parametros=limite_parametros,
     ruta_incendio_referencia=ruta_incendio_referencia,
