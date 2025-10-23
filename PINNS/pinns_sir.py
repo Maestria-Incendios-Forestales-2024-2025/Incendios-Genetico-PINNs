@@ -20,7 +20,7 @@ epochs_adam = 40000
 # D_I = float(sys.argv[1])
 # beta_val = float(sys.argv[2])
 beta_val = 1.0
-D_I = 0.0001 # valor inicial para el problema inverso
+D_I = -6.0 # valor inicial para el problema inverso
 
 ############################## CARGADO DE LOS DATOS PARA EL PROBLEMA INVERSO ###############################################
 

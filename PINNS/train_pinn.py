@@ -26,28 +26,26 @@ class FireSpread_PINN(nn.Module):
         self.activation = nn.Tanh()
 
         # inicialización de pesos como tensores en el device
-        self.w_ic  = torch.tensor(1.0, device=device)
-        self.w_bc  = torch.tensor(1.0, device=device)
-        self.w_pde = torch.tensor(1.0, device=device)
+        self.w_ic  = torch.tensor(1.0, device=device).requires_grad_(False)
+        self.w_bc  = torch.tensor(1.0, device=device).requires_grad_(False)
+        self.w_pde = torch.tensor(1.0, device=device).requires_grad_(False)
+        self.w_data = torch.tensor(1.0, device=device).requires_grad_(False)
+
+        self.last_layer_weights = self.layers[-1].weight
+        self.R0 = None
+        self.initialization_epoch = 50
 
         # Parámetros del modelo
         self.beta = beta
         self.gamma = gamma
         self.mode = modo
 
-        # Parámetro D_I puede ser fijo o entrenable (reparametrizado con softplus para positividad)
+        # Parámetro D_I puede ser fijo o entrenable
         if self.mode == 'forward':
             self.D_I = D_I  # float/constante
-            self.raw_DI = None
         elif self.mode == 'inverse':
-            # Inicializar raw_DI ~ softplus^{-1}(D_I) para que softplus(raw_DI) ~ D_I
-            # softplus^{-1}(y) = log(exp(y) - 1)
-            # init_raw = torch.log(torch.expm1(torch.tensor(D_I, device=device))) if D_I > 0 else torch.tensor(-10.0, device=device)
-            # self.raw_DI = nn.Parameter(init_raw)
-            # No definimos self.D_I como Parameter directo; se obtiene vía softplus(self.raw_DI)
-            # self.D_I = nn.Parameter(torch.tensor(D_I, device=device))
-            self.log_DI = nn.Parameter(torch.tensor([-5.0], device=device))  # log(D_I) para positividad
-    
+            self.log_DI = nn.Parameter(torch.tensor([D_I], device=device))  # log(D_I) para positividad
+
     @property
     def D_I_val(self):
         if self.mode == 'inverse':
@@ -56,13 +54,6 @@ class FireSpread_PINN(nn.Module):
         else:
             # Retorna el valor fijo D_I
             return self.D_I
-    
-    # def get_DI(self):
-    #     """Devuelve D_I positivo. En modo inverse usa softplus(raw_DI), en forward el valor fijo."""
-    #     if self.mode == 'inverse':
-    #         # pequeño epsilon para evitar exacto 0
-    #         return F.softplus(self.raw_DI) + 1e-12
-    #     return torch.tensor(self.D_I, device=device) if not isinstance(self.D_I, torch.Tensor) else self.D_I
 
     def forward(self, x, y, t):
         inputs = torch.cat((x, y, t), dim=1)
@@ -209,43 +200,60 @@ class FireSpread_PINN(nn.Module):
         return loss
     
     # -------------------- ACTUALIZACIÓN DE PESOS --------------------
-    def update_loss_weights(self, loss_ic, loss_bc, loss_phys):
+    def update_loss_weights(self, loss_ic, loss_bc, loss_phys, loss_data, epoch, every=1000):
         """
         Recalcula pesos adaptativos para IC, BC y PDE cada 'every' épocas.
         """
+        if epoch % every != 0 or epoch == 0:
+            return
+
+        # 1. Parámetro de referencia para la normalización
+        # Se elige un tensor representativo de los parámetros de la red
+        W = self.last_layer_weights
+
+        if epoch < self.initialization_epoch:
+            return
+
+        # 2. Calcular la referencia de la norma (norma de la PDE)
+        # Calentar R0 durante 50 épocas iniciales para estabilizar
+        if self.R0 is None:
+            self.R0 = torch.autograd.grad(loss_phys, W, retain_graph=True, allow_unused=True)[0].norm(2)
+            print(f"[Grad-Norm] R0 inicializado a: {self.R0.item()}")
+            return
+
         eps = 1e-8
-        alpha = 0.9
 
-        # Asignamos los pesos viejos a una variable intermedia
-        w_ic_old, w_bc_old, w_pde_old = self.w_ic, self.w_bc, self.w_pde
+        # 3. Calcular gradientes de cada pérdida respecto a W
+        g_ic = torch.autograd.grad(loss_ic, W, retain_graph=True, allow_unused=True)[0].norm(2).clamp(min=eps)
+        g_bc = torch.autograd.grad(loss_bc, W, retain_graph=True, allow_unused=True)[0].norm(2).clamp(min=eps)
+        g_pde = torch.autograd.grad(loss_phys, W, retain_graph=True, allow_unused=True)[0].norm(2).clamp(min=eps)
+        g_data = torch.autograd.grad(loss_data, W, retain_graph=True, allow_unused=True)[0].norm(2).clamp(min=eps)
 
-        params_for_grad = [p for p in self.parameters() if p.requires_grad]
+        # 4. Calcular el factor de normalización (L_i / L_pde) * R_pde
 
-        grads_ic = torch.autograd.grad(loss_ic, params_for_grad, retain_graph=True, create_graph=False, allow_unused=True)
-        grads_bc = torch.autograd.grad(loss_bc, params_for_grad, retain_graph=True, create_graph=False, allow_unused=True)
-        grads_pde = torch.autograd.grad(loss_phys, params_for_grad, retain_graph=True, create_graph=False, allow_unused=True)
+        # R_pde / R_i = (norma de gradiente de la PDE) / (norma de gradiente de la pérdida i)
+        lambda_ic = self.R0 / g_ic
+        lambda_bc = self.R0 / g_bc
+        lambda_pde = self.R0 / g_pde
+        lambda_data = self.R0 / g_data
 
-        def grad_norm(grads):
-            total = torch.tensor(0.0, device=device)
-            for g in grads:
-                if g is not None:
-                    total = total + (g.detach()**2).sum()
-            return total.sqrt()
+        # 5. Normalizar los factores
+        sum_lambda = lambda_ic + lambda_bc + lambda_pde + lambda_data
+        num_weights = 4
 
-        g_ic, g_bc, g_pde = grad_norm(grads_ic), grad_norm(grads_bc), grad_norm(grads_pde)
-        norms = torch.stack([g_ic, g_bc, g_pde]).clamp(min=eps)
+        w_ic_new = lambda_ic * num_weights / sum_lambda
+        w_bc_new = lambda_bc * num_weights / sum_lambda
+        w_pde_new = lambda_pde * num_weights / sum_lambda
+        w_data_new = lambda_data * num_weights / sum_lambda
 
-        lambdas = (norms.sum() / norms)  
+        # 6. Actualizar los pesos con una Media Móvil Exponencial
+        alpha = 0.9  # factor de suavizado
 
-        # actualizar atributos internos
-        self.w_ic, self.w_bc, self.w_pde = [l.item() for l in lambdas]
+        self.w_ic = alpha * self.w_ic + (1-alpha) * w_ic_new.detach()
+        self.w_bc = alpha * self.w_bc + (1-alpha) * w_bc_new.detach()
+        self.w_pde = alpha * self.w_pde + (1-alpha) * w_pde_new.detach()
+        self.w_data = alpha * self.w_data + (1-alpha) * w_data_new.detach()
 
-        # Asignamos nuevos valores
-        self.w_ic = alpha * w_ic_old + (1-alpha) * self.w_ic
-        self.w_bc = alpha * w_bc_old + (1-alpha) * self.w_bc
-        self.w_pde = alpha * w_pde_old + (1-alpha) * self.w_pde
-
-        return self.w_ic, self.w_bc, self.w_pde
 
     # -------------------- SAMPLEO POR NO LINEALIDAD --------------------
     def sample_by_nonlinearity(self, N_samples, N_candidates=100000, initial_points=False):
@@ -282,7 +290,7 @@ class FireSpread_PINN(nn.Module):
         if self.mode == 'inverse':
             loss_data = self.loss_data(*data['data'])
             # combinación lineal con los pesos
-            total_loss = self.w_ic * loss_ic + self.w_bc * loss_bc + self.w_pde * loss_phys + loss_data
+            total_loss = self.w_ic * loss_ic + self.w_bc * loss_bc + self.w_pde * loss_phys + self.w_data * loss_data
         else:
             # combinación lineal con los pesos
             total_loss = self.w_ic * loss_ic + self.w_bc * loss_bc + self.w_pde * loss_phys
@@ -376,7 +384,7 @@ def train_pinn(modo='forward',
 
     loss_phys_list, loss_bc_list, loss_ic_list, loss_data_list = [], [], [], []
 
-    temporal_weights = torch.ones(N_blocks, device=device)
+    # temporal_weights = torch.ones(N_blocks, device=device)
 
     D_I_history = []
 
@@ -411,7 +419,7 @@ def train_pinn(modo='forward',
             'data': (S_data, I_data, R_data, t_data) if model.mode == 'inverse' else None,
         }
 
-        params = (temporal_weights, N_blocks)
+        # params = (temporal_weights, N_blocks)
 
         # total_loss, loss_phys, loss_ic, loss_bc, loss_data, temporal_losses = model.closure(optimizer, data, params)
         # total_loss, loss_phys, loss_ic, loss_bc, loss_data = model.closure(optimizer, data, params)
@@ -424,10 +432,7 @@ def train_pinn(modo='forward',
         # temporal_weights = temporal_weights / (temporal_weights.mean() + 1e-12)
 
         # Actualización de pesos (usar el grafo antes del step)
-        # if epoch % 1000 == 0 and epoch > 0:
-        #     # Computamos los pesos nuevos
-        #     model.w_ic, model.w_bc, model.w_pde = model.update_loss_weights(loss_ic, loss_bc, loss_phys)
-        #     print(f"[Epoch {epoch}] Pesos actualizados: w_pde = {model.w_pde}, w_ic = {model.w_ic}, w_bc = {model.w_bc}")
+        model.update_loss_weights(loss_ic, loss_bc, loss_phys, loss_data, epoch)
 
         optimizer.step()
 
@@ -454,6 +459,7 @@ def train_pinn(modo='forward',
                 f"Adam Época {epoch} | Loss: {total_loss.item()} | "
                 f"PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | "
                 f"BC Loss: {loss_bc.item()} | "
+                f"Data Loss: {loss_data.item() if model.mode == 'inverse' else 'N/A'} | "
                 f"D_I: {model.D_I_val.item() if model.mode == 'inverse' else model.D_I_val}"
             )
 
