@@ -45,14 +45,24 @@ class FireSpread_PINN(nn.Module):
             # init_raw = torch.log(torch.expm1(torch.tensor(D_I, device=device))) if D_I > 0 else torch.tensor(-10.0, device=device)
             # self.raw_DI = nn.Parameter(init_raw)
             # No definimos self.D_I como Parameter directo; se obtiene vía softplus(self.raw_DI)
-            self.D_I = nn.Parameter(torch.tensor(D_I, device=device))
-
-    def get_DI(self):
-        """Devuelve D_I positivo. En modo inverse usa softplus(raw_DI), en forward el valor fijo."""
+            # self.D_I = nn.Parameter(torch.tensor(D_I, device=device))
+            self.log_DI = nn.Parameter(torch.tensor([-5.0], device=device))  # log(D_I) para positividad
+    
+    @property
+    def D_I_val(self):
         if self.mode == 'inverse':
-            # pequeño epsilon para evitar exacto 0
-            return F.softplus(self.raw_DI) + 1e-12
-        return torch.tensor(self.D_I, device=device) if not isinstance(self.D_I, torch.Tensor) else self.D_I
+            # Retorna el valor físico D_I = exp(log_DI)
+            return torch.exp(self.log_DI)
+        else:
+            # Retorna el valor fijo D_I
+            return self.D_I
+    
+    # def get_DI(self):
+    #     """Devuelve D_I positivo. En modo inverse usa softplus(raw_DI), en forward el valor fijo."""
+    #     if self.mode == 'inverse':
+    #         # pequeño epsilon para evitar exacto 0
+    #         return F.softplus(self.raw_DI) + 1e-12
+    #     return torch.tensor(self.D_I, device=device) if not isinstance(self.D_I, torch.Tensor) else self.D_I
 
     def forward(self, x, y, t):
         inputs = torch.cat((x, y, t), dim=1)
@@ -97,7 +107,8 @@ class FireSpread_PINN(nn.Module):
         return loss_top_bc + loss_bottom_bc + loss_left_bc + loss_right_bc
 
     #---------------- PÉRDIDA POR LA FÍSICA ----------------#
-    def loss_pde(self, x_phys, y_phys, t_phys, temporal_weights, N_blocks):
+    # def loss_pde(self, x_phys, y_phys, t_phys, temporal_weights, N_blocks):
+    def loss_pde(self, x_phys, y_phys, t_phys):    
         # Crear bloques temporales
         # T_final = temporal_domain
         # t_blocks = torch.linspace(0, T_final, N_blocks + 1, device=device)
@@ -151,7 +162,7 @@ class FireSpread_PINN(nn.Module):
                 # Residuales PDE
         loss_S = dS_dt + self.beta * S_pred * I_pred
         # DI_val = self.get_DI()
-        loss_I = dI_dt - (self.beta * S_pred * I_pred - self.gamma * I_pred) - self.D_I * (d2I_dx2 + d2I_dy2)
+        loss_I = dI_dt - (self.beta * S_pred * I_pred - self.gamma * I_pred) - self.D_I_val * (d2I_dx2 + d2I_dy2)
         loss_R = dR_dt - self.gamma * I_pred
 
                 # block_loss = (loss_S**2 + loss_I**2 + loss_R**2).mean()
@@ -247,7 +258,7 @@ class FireSpread_PINN(nn.Module):
 
         with torch.no_grad():
             S_pred, I_pred, _ = self.forward(x, y, t).split(1, dim=1)
-            nonlin_strength = torch.abs(S_pred * I_pred).squeeze()
+            nonlin_strength = torch.abs(self.beta * S_pred * I_pred).squeeze()
             denom = nonlin_strength.sum()
             eps = 1e-12
             if torch.isnan(denom) or denom <= eps:
@@ -259,12 +270,14 @@ class FireSpread_PINN(nn.Module):
         return x[idx], y[idx], t[idx]
 
     # -------------------- CLOSURE PARA OPTIMIZACIÓN --------------------
-    def closure(self, optimizer, data, params):
+    # def closure(self, optimizer, data, params):
+    def closure(self, optimizer, data):
         # calcular pérdidas
         loss_ic = self.loss_initial_condition(*data['ic'])
         loss_bc = self.loss_boundary_condition(*data['bc'])
         # loss_phys, temporal_losses = self.loss_pde(*data['phys'], *params)
-        loss_phys = self.loss_pde(*data['phys'], *params)
+        # loss_phys = self.loss_pde(*data['phys'], *params)
+        loss_phys = self.loss_pde(*data['phys'])
 
         if self.mode == 'inverse':
             loss_data = self.loss_data(*data['data'])
@@ -276,7 +289,7 @@ class FireSpread_PINN(nn.Module):
 
         optimizer.zero_grad()
         # Retener grafo para permitir autograd.grad en update_loss_weights
-        total_loss.backward(retain_graph=False)
+        total_loss.backward(retain_graph=True)
 
         return (
             total_loss.detach(),
@@ -305,28 +318,6 @@ def train_pinn(modo='forward',
         gamma=gamma_val,
         D_I=D_I
     ).to(device)
-    
-    # Optimizador: dos grupos de parámetros cuando es problema inverso
-    # if modo == 'inverse':
-    #     # Separar raw_DI del resto
-    #     raw_di_params = []
-    #     other_params = []
-    #     for name, p in model.named_parameters():
-    #         if not p.requires_grad:
-    #             continue
-    #         if name == 'raw_DI':
-    #             raw_di_params.append(p)
-    #         else:
-    #             other_params.append(p)
-    #     # Si por alguna razón no hay raw_DI (seguridad), tratamos todo como other_params
-    #     param_groups = []
-    #     if raw_di_params:
-    #         param_groups.append({'params': raw_di_params, 'lr': 5e-3})
-    #     if other_params:
-    #         param_groups.append({'params': other_params, 'lr': 1e-3})
-    #     optimizer = optim.Adam(param_groups)
-    # else:
-    #     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
@@ -346,9 +337,6 @@ def train_pinn(modo='forward',
 
     # Inicializar best_D_I en modo inverso para evitar acceso a atributos inexistentes
     best_D_I = None
-    # if modo == 'inverse':
-    #     with torch.no_grad():
-    #         best_D_I = model.get_DI().item()
 
     # Genera datos de entrenamiento
     N_interior = 40000  # Puntos adentro del dominio
@@ -357,7 +345,9 @@ def train_pinn(modo='forward',
 
     # Sampleo (x, y, t) en el dominio interior (0,1)x(0,1)x(0,1)
     x_interior, y_interior, t_interior = model.sample_by_nonlinearity(N_interior)
-    x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
+    x_interior.requires_grad_(True) 
+    y_interior.requires_grad_(True)
+    t_interior.requires_grad_(True)
 
     # Puntos de condiciones iniciales (t=0)
     x_init, y_init, t_init = model.sample_by_nonlinearity(N_initial-1, initial_points=True)
@@ -393,9 +383,11 @@ def train_pinn(modo='forward',
     # print(f"Entrenando PINNs con D = {model.D_I}, beta = {model.beta}, gamma = {model.gamma}")
 
     for epoch in range(start_epoch, epochs_adam):
-        if epoch % 500 == 0 and epoch > 0: # Sampleo adaptativo cada 500 épocas
+        if epoch % 500 == 0 and epoch > 10000: # Sampleo adaptativo cada 500 épocas
             x_interior, y_interior, t_interior = model.sample_by_nonlinearity(N_interior)
-            x_interior.requires_grad, y_interior.requires_grad, t_interior.requires_grad = True, True, True
+            x_interior.requires_grad_(True) 
+            y_interior.requires_grad_(True)
+            t_interior.requires_grad_(True)
 
             x_init, y_init, t_init = model.sample_by_nonlinearity(N_initial-1, initial_points=True)
 
@@ -422,7 +414,8 @@ def train_pinn(modo='forward',
         params = (temporal_weights, N_blocks)
 
         # total_loss, loss_phys, loss_ic, loss_bc, loss_data, temporal_losses = model.closure(optimizer, data, params)
-        total_loss, loss_phys, loss_ic, loss_bc, loss_data = model.closure(optimizer, data, params)
+        # total_loss, loss_phys, loss_ic, loss_bc, loss_data = model.closure(optimizer, data, params)
+        total_loss, loss_phys, loss_ic, loss_bc, loss_data = model.closure(optimizer, data)
 
         # Actualización de pesos temporales (con normalización para estabilidad)
         # partial_sums = torch.cumsum(temporal_losses.detach(), dim=0)  # sumatoria acumulada por bloques
@@ -438,61 +431,30 @@ def train_pinn(modo='forward',
 
         optimizer.step()
 
-        if model.mode == 'inverse':
-            with torch.no_grad():
-                # Asegurar que D_I se mantenga positivo
-                if model.D_I.item() < 0:
-                    model.D_I.data.clamp_(min=1e-6)
-
-        # En reparametrización con softplus ya garantizamos positividad de D_I, no hace falta clamp
-
         # Guardar cada pérdida individual
         loss_phys_list.append(loss_phys.item())
         loss_ic_list.append(loss_ic.item())
         loss_bc_list.append(loss_bc.item())
         loss_data_list.append(loss_data.item())
 
-        # -------------------- Guardar D_I --------------------
-        # if model.mode == 'inverse':
-        #     # Guardar valor escalar actual de D_I reparametrizado
-        #     with torch.no_grad():
-        #         D_I_history.append(model.get_DI().item())
-        # else:
-        #     D_I_history.append(model.D_I)  # modo forward, valor fijo
-
-        # # 📌 Guardar el mejor modelo
-        # if total_loss.item() < best_loss:
-        #     best_loss = total_loss.item()
-        #     best_model_state = copy.deepcopy({k: v.cpu() for k, v in model.state_dict().items()}) # Transfiere el modelo a la CPU
-        #     if model.mode == 'inverse':
-        #         best_D_I = model.get_DI().item()  # 🔹 Guardar el mejor D_I (reparametrizado)
-        
-        # if epoch % 100 == 0 or epoch == epochs_adam - 1:
-        #     print(
-        #         f"Adam Época {epoch} | Loss: {total_loss.item()} | "
-        #         f"PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | "
-        #         f"BC Loss: {loss_bc.item()} | "
-        #         f"D_I: {model.get_DI().item() if model.mode == 'inverse' else model.D_I}"
-        #     )
-
         if model.mode == 'inverse':
             # Si D_I es un nn.Parameter, .item() obtiene su valor como float
-            D_I_history.append(model.D_I.item())
+            D_I_history.append(model.D_I_val.item())
         else:
-            D_I_history.append(model.D_I)  # modo forward, valor fijo
+            D_I_history.append(model.D_I_val)  # modo forward, valor fijo
 
         # 📌 Guardar el mejor modelo
         if total_loss.item() < best_loss:
             best_loss = total_loss.item()
             best_model_state = copy.deepcopy({k: v.cpu() for k, v in model.state_dict().items()}) # Transfiere el modelo a la CPU
             if model.mode == 'inverse':
-                best_D_I = model.D_I.item()  # 🔹 Guardar el mejor D_I
+                best_D_I = model.D_I_val.item()  # 🔹 Guardar el mejor D_I
         if epoch % 100 == 0 or epoch == epochs_adam - 1:
             print(
                 f"Adam Época {epoch} | Loss: {total_loss.item()} | "
                 f"PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | "
                 f"BC Loss: {loss_bc.item()} | "
-                f"D_I: {model.D_I.item() if model.mode == 'inverse' else model.D_I}"
+                f"D_I: {model.D_I_val.item() if model.mode == 'inverse' else model.D_I_val}"
             )
 
         last_epoch = epoch
