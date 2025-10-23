@@ -88,7 +88,7 @@ def mutate(individual, mutation_rate, param_bounds):
     
     # Aplicar mutación a cada parámetro
     for i in range(len(mutated)):
-        if rs.random.random() < mutation_rate:
+        if rs.random() < mutation_rate:
             # Verificar que tenemos límites para este parámetro
             if i < len(param_bounds):
                 low, high = param_bounds[i]
