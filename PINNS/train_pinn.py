@@ -18,7 +18,7 @@ MAX_BLOCK_POINTS = 4096  # límite de puntos por bloque temporal para estabilida
 
 class FireSpread_PINN(nn.Module):
     def __init__(self, modo='forward', beta = 1.0, gamma = 0.3, D_I = 0.005,
-                layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3]):
+                layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3]):
         super().__init__()
         self.layers = nn.ModuleList()
         for i in range(len(layers) - 1):
@@ -26,10 +26,10 @@ class FireSpread_PINN(nn.Module):
         self.activation = nn.Tanh()
 
         # inicialización de pesos como tensores en el device
-        self.w_ic  = torch.tensor(1.0, device=device).requires_grad_(False)
-        self.w_bc  = torch.tensor(1.0, device=device).requires_grad_(False)
+        self.w_ic  = torch.tensor(0.0, device=device).requires_grad_(False)
+        self.w_bc  = torch.tensor(0.0, device=device).requires_grad_(False)
         self.w_pde = torch.tensor(1.0, device=device).requires_grad_(False)
-        self.w_data = torch.tensor(1.0, device=device).requires_grad_(False)
+        self.w_data = torch.tensor(10000.0, device=device).requires_grad_(False)
 
         self.last_layer_weights = self.layers[-1].weight
         self.R0 = None
@@ -254,11 +254,14 @@ class FireSpread_PINN(nn.Module):
         self.w_pde = alpha * self.w_pde + (1-alpha) * w_pde_new.detach()
         self.w_data = alpha * self.w_data + (1-alpha) * w_data_new.detach()
 
+        print(f"Pesos actualizados: {self.w_ic.item():.4f} (IC), {self.w_bc.item():.4f} (BC), {self.w_pde.item():.4f} (PDE), {self.w_data.item():.4f} (Data)")
 
     # -------------------- SAMPLEO POR NO LINEALIDAD --------------------
     def sample_by_nonlinearity(self, N_samples, N_candidates=100000, initial_points=False):
         x = domain_size*torch.rand(N_candidates, 1, device=device)
         y = domain_size*torch.rand(N_candidates, 1, device=device)
+        x.requires_grad_(True)
+        y.requires_grad_(True)
         if initial_points:
             t = torch.zeros(N_candidates, 1, device=device)
         else:
@@ -266,7 +269,12 @@ class FireSpread_PINN(nn.Module):
 
         with torch.no_grad():
             S_pred, I_pred, _ = self.forward(x, y, t).split(1, dim=1)
-            nonlin_strength = torch.abs(self.beta * S_pred * I_pred).squeeze()
+            dI_dx = torch.autograd.grad(I_pred, x, torch.ones_like(I_pred), create_graph=True)[0]
+            dI_dy = torch.autograd.grad(I_pred, y, torch.ones_like(I_pred), create_graph=True)[0]
+            d2I_dx2 = torch.autograd.grad(dI_dx, x, torch.ones_like(dI_dx), create_graph=True)[0]
+            d2I_dy2 = torch.autograd.grad(dI_dy, y, torch.ones_like(dI_dy), create_graph=True)[0]
+            # nonlin_strength = torch.abs(self.beta * S_pred * I_pred).squeeze()
+            nonlin_strength = torch.abs(d2I_dx2 + d2I_dy2).squeeze() # reforzamos el entrenamiento en zonas difusivas
             denom = nonlin_strength.sum()
             eps = 1e-12
             if torch.isnan(denom) or denom <= eps:
@@ -328,6 +336,17 @@ def train_pinn(modo='forward',
     ).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
+
+    optimizer_lbfgs = torch.optim.LBFGS(
+        model.parameters(),
+        lr=1.0,           # Tasa de aprendizaje inicial (comúnmente 1.0)
+        max_iter=10000,   # Número MÁXIMO de iteraciones INTERNAS por paso
+        max_eval=12500,   # Máximo de evaluaciones de función/gradiente
+        history_size=50,  # Tamaño de la memoria para la aproximación de la matriz Hessiana
+        tolerance_grad=1e-7, # Tolerancia para el gradiente (criterio de parada)
+        tolerance_change=1e-9, # Tolerancia para el cambio de pérdida
+        line_search_fn="strong_wolfe" # Algoritmo de búsqueda de línea
+    )   
 
     # Cargando checkpoint
     best_loss = float("inf")
@@ -391,7 +410,7 @@ def train_pinn(modo='forward',
     # print(f"Entrenando PINNs con D = {model.D_I}, beta = {model.beta}, gamma = {model.gamma}")
 
     for epoch in range(start_epoch, epochs_adam):
-        if epoch % 500 == 0 and epoch > 10000: # Sampleo adaptativo cada 500 épocas
+        if epoch % 1000 == 0 and epoch > 10000: # Sampleo adaptativo cada 1000 épocas
             x_interior, y_interior, t_interior = model.sample_by_nonlinearity(N_interior)
             x_interior.requires_grad_(True) 
             y_interior.requires_grad_(True)
@@ -413,11 +432,23 @@ def train_pinn(modo='forward',
                 torch.cuda.empty_cache()
 
         data = {
-            'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
-            'bc': (y_top, y_bottom, x_left, x_right, x_boundary, y_boundary, t_boundary),
+            # 'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
+            # 'bc': (y_top, y_bottom, x_left, x_right, x_boundary, y_boundary, t_boundary),
             'phys': (x_interior, y_interior, t_interior),
             'data': (S_data, I_data, R_data, t_data) if model.mode == 'inverse' else None,
         }
+
+        # La función wrapper para el optimizador    
+        def lbfgs_closure():
+            # 1. Llama a la closure principal de tu modelo.
+            # El Grad-Norm NO debe ejecutarse en esta fase, ya que L-BFGS opera sobre 
+            # una pérdida combinada con pesos FIJOS o pre-calculados por ADAM.
+
+            # En tu caso, tu closure no toma 'params', ajusté la llamada a la versión corregida:
+            total_loss, _, _, _, _ = model.closure(optimizer_lbfgs, data) 
+    
+            # 2. L-BFGS solo requiere que se devuelva la pérdida total.
+            return total_loss
 
         # params = (temporal_weights, N_blocks)
 
@@ -432,7 +463,7 @@ def train_pinn(modo='forward',
         # temporal_weights = temporal_weights / (temporal_weights.mean() + 1e-12)
 
         # Actualización de pesos (usar el grafo antes del step)
-        model.update_loss_weights(loss_ic, loss_bc, loss_phys, loss_data, epoch)
+        # model.update_loss_weights(loss_ic, loss_bc, loss_phys, loss_data, epoch)
 
         optimizer.step()
 
@@ -457,14 +488,18 @@ def train_pinn(modo='forward',
         if epoch % 100 == 0 or epoch == epochs_adam - 1:
             print(
                 f"Adam Época {epoch} | Loss: {total_loss.item()} | "
-                f"PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | "
-                f"BC Loss: {loss_bc.item()} | "
+                f"PDE Loss: {loss_phys.item()} | "  #| IC Loss: {loss_ic.item()} | "
+                # f"BC Loss: {loss_bc.item()} | "
                 f"Data Loss: {loss_data.item() if model.mode == 'inverse' else 'N/A'} | "
                 f"D_I: {model.D_I_val.item() if model.mode == 'inverse' else model.D_I_val}"
             )
 
         last_epoch = epoch
 
+    print("🚀 Iniciando optimización de refinamiento con L-BFGS...")
+    optimizer_lbfgs.step(lbfgs_closure)
+    print("✅ Optimización L-BFGS completada.")
+    
     np.save("loss_phys.npy", np.array(loss_phys_list))
     np.save("loss_ic.npy", np.array(loss_ic_list))
     np.save("loss_bc.npy", np.array(loss_bc_list))

@@ -45,7 +45,7 @@ def load_SIR_data(time_points, data_dir='_numpy_D0.0005_beta1.0_gamma0.3_t'):
     return S_data_list, I_data_list, R_data_list
 
 # --- Cargar datos para los tiempos que te interesen ---
-time_points = [1.0, 5.0, 10.0]
+time_points = [0.0, 1.0, 5.0, 10.0]
 S_data_list, I_data_list, R_data_list = load_SIR_data(time_points)
 
 ############################## ENTRENAMIENTO DEL MODELO ###############################################
