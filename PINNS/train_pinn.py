@@ -18,18 +18,19 @@ MAX_BLOCK_POINTS = 4096  # límite de puntos por bloque temporal para estabilida
 
 class FireSpread_PINN(nn.Module):
     def __init__(self, modo='forward', beta = 1.0, gamma = 0.3, D_I = 0.005,
-                layers=[3, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 3]):
+                layers=[3, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 3]):
         super().__init__()
         self.layers = nn.ModuleList()
         for i in range(len(layers) - 1):
             self.layers.append(nn.Linear(layers[i], layers[i+1]))
-        self.activation = nn.Tanh()
+        # self.activation = nn.Tanh()
+        self.activation = nn.SiLU()
 
         # inicialización de pesos como tensores en el device
         self.w_ic  = torch.tensor(0.0, device=device).requires_grad_(False)
         self.w_bc  = torch.tensor(0.0, device=device).requires_grad_(False)
-        self.w_pde = torch.tensor(1.0, device=device).requires_grad_(False)
-        self.w_data = torch.tensor(10000.0, device=device).requires_grad_(False)
+        self.w_pde = torch.tensor(100.0, device=device).requires_grad_(False)
+        self.w_data = torch.tensor(1.0, device=device).requires_grad_(False)
 
         self.last_layer_weights = self.layers[-1].weight
         self.R0 = None
@@ -267,13 +268,14 @@ class FireSpread_PINN(nn.Module):
         else:
             t = temporal_domain * torch.rand(N_candidates, 1, device=device)
 
-        with torch.no_grad():
-            S_pred, I_pred, _ = self.forward(x, y, t).split(1, dim=1)
-            dI_dx = torch.autograd.grad(I_pred, x, torch.ones_like(I_pred), create_graph=True)[0]
-            dI_dy = torch.autograd.grad(I_pred, y, torch.ones_like(I_pred), create_graph=True)[0]
-            d2I_dx2 = torch.autograd.grad(dI_dx, x, torch.ones_like(dI_dx), create_graph=True)[0]
-            d2I_dy2 = torch.autograd.grad(dI_dy, y, torch.ones_like(dI_dy), create_graph=True)[0]
+        # with torch.no_grad():
+        S_pred, I_pred, _ = self.forward(x, y, t).split(1, dim=1)
+        dI_dx = torch.autograd.grad(I_pred, x, torch.ones_like(I_pred), create_graph=True, retain_graph=True)[0]
+        dI_dy = torch.autograd.grad(I_pred, y, torch.ones_like(I_pred), create_graph=True, retain_graph=True)[0]
+        d2I_dx2 = torch.autograd.grad(dI_dx, x, torch.ones_like(dI_dx), create_graph=True, retain_graph=True)[0]
+        d2I_dy2 = torch.autograd.grad(dI_dy, y, torch.ones_like(dI_dy), create_graph=True, retain_graph=True)[0]
             # nonlin_strength = torch.abs(self.beta * S_pred * I_pred).squeeze()
+        with torch.no_grad():
             nonlin_strength = torch.abs(d2I_dx2 + d2I_dy2).squeeze() # reforzamos el entrenamiento en zonas difusivas
             denom = nonlin_strength.sum()
             eps = 1e-12
@@ -283,7 +285,7 @@ class FireSpread_PINN(nn.Module):
             else:
                 weights = nonlin_strength / (denom + eps)
             idx = torch.multinomial(weights, N_samples, replacement=False)
-        return x[idx], y[idx], t[idx]
+        return x[idx].detach(), y[idx].detach(), t[idx].detach()
 
     # -------------------- CLOSURE PARA OPTIMIZACIÓN --------------------
     # def closure(self, optimizer, data, params):
@@ -408,6 +410,7 @@ def train_pinn(modo='forward',
     D_I_history = []
 
     # print(f"Entrenando PINNs con D = {model.D_I}, beta = {model.beta}, gamma = {model.gamma}")
+    pesos_actualizados = False
 
     for epoch in range(start_epoch, epochs_adam):
         if epoch % 1000 == 0 and epoch > 10000: # Sampleo adaptativo cada 1000 épocas
@@ -432,8 +435,8 @@ def train_pinn(modo='forward',
                 torch.cuda.empty_cache()
 
         data = {
-            # 'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
-            # 'bc': (y_top, y_bottom, x_left, x_right, x_boundary, y_boundary, t_boundary),
+            'ic': (x_init, y_init, t_init, S_init, I_init, R_init),
+            'bc': (y_top, y_bottom, x_left, x_right, x_boundary, y_boundary, t_boundary),
             'phys': (x_interior, y_interior, t_interior),
             'data': (S_data, I_data, R_data, t_data) if model.mode == 'inverse' else None,
         }
@@ -456,6 +459,12 @@ def train_pinn(modo='forward',
         # total_loss, loss_phys, loss_ic, loss_bc, loss_data = model.closure(optimizer, data, params)
         total_loss, loss_phys, loss_ic, loss_bc, loss_data = model.closure(optimizer, data)
 
+        if epoch > 20000 and not pesos_actualizados:
+            print("Fijando pesos de pérdida para estabilizar entrenamiento.")
+            model.w_pde = torch.tensor(1.0, device=device).requires_grad_(False)
+            model.w_data = torch.tensor(10.0, device=device).requires_grad_(False)
+            pesos_actualizados = True
+            
         # Actualización de pesos temporales (con normalización para estabilidad)
         # partial_sums = torch.cumsum(temporal_losses.detach(), dim=0)  # sumatoria acumulada por bloques
         # temporal_weights = torch.exp(-partial_sums)                   # exp(-sum) por bloque
