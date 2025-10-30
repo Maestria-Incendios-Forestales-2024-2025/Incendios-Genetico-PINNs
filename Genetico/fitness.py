@@ -105,7 +105,7 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamm
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS POR BATCH ###############################################
 
 def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None,
-                  ajustar_ignicion=True, ignicion_fija_x=None, ignicion_fija_y=None, debug=True):
+                  ajustar_ignicion=True, ignicion_fija_x=None, ignicion_fija_y=None, debug=False):
     """
     Calcula el fitness para múltiples combinaciones de parámetros en paralelo.
     

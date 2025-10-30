@@ -351,16 +351,16 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
         )
     )
 
-    c_prime_y = cp.zeros((n_batch, nx, ny), dtype=cp.float32)
-    d_prime_y = cp.zeros((n_batch, nx, ny), dtype=cp.float32)
-    threads_y_solve = (16, 1)
-    grid_y_solve = ((nx + threads_y_solve[0] - 1) // threads_y_solve[0], 1, n_batch)
+    c_prime_x = cp.zeros((n_batch, ny, nx), dtype=cp.float32)
+    d_prime_x = cp.zeros((n_batch, ny, nx), dtype=cp.float32)
+    threads_x_solve = (16,)
+    grid_x_solve = ((ny + threads_x_solve[0] - 1) // threads_x_solve[0], 1, n_batch)
 
-    solve_tridiagonal_y_global_kernel(
-        grid_y_solve, threads_y_solve,
+    solve_tridiagonal_x_global_kernel(
+        grid_x_solve, threads_x_solve,
         (
             rhs_y.ravel(), I_star.ravel(), 
-            c_prime_y.ravel(), d_prime_y.ravel(),
+            c_prime_x.ravel(), d_prime_x.ravel(),
             D.ravel(), cp.float32(dt), cp.float32(d),
             cp.int32(ny), cp.int32(nx), cp.int32(n_batch),
             vegetacion.ravel()
@@ -393,16 +393,16 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
         )
     )
 
-    c_prime_x = cp.zeros((n_batch, ny, nx), dtype=cp.float32)
-    d_prime_x = cp.zeros((n_batch, ny, nx), dtype=cp.float32)
-    threads_x_solve = (16,)
-    grid_x_solve = ((ny + threads_x_solve[0] - 1) // threads_x_solve[0], 1, n_batch)
+    c_prime_y = cp.zeros((n_batch, nx, ny), dtype=cp.float32)
+    d_prime_y = cp.zeros((n_batch, nx, ny), dtype=cp.float32)
+    threads_y_solve = (16, 1)
+    grid_y_solve = ((nx + threads_y_solve[0] - 1) // threads_y_solve[0], 1, n_batch)
 
-    solve_tridiagonal_x_global_kernel(
-        grid_x_solve, threads_x_solve,
+    solve_tridiagonal_y_global_kernel(
+        grid_y_solve, threads_y_solve,
         (
             rhs_x.ravel(), I_new.ravel(), 
-            c_prime_x.ravel(), d_prime_x.ravel(),
+            c_prime_y.ravel(), d_prime_y.ravel(),
             D.ravel(), cp.float32(dt), cp.float32(d),
             cp.int32(ny), cp.int32(nx), cp.int32(n_batch),
             vegetacion.ravel()

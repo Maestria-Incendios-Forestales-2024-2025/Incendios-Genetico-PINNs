@@ -88,13 +88,13 @@ def mutate(individual, mutation_rate, param_bounds):
     
     # Aplicar mutación a cada parámetro
     for i in range(len(mutated)):
-        if rs.random.random() < mutation_rate:
+        if rs.random() < mutation_rate:
             # Verificar que tenemos límites para este parámetro
             if i < len(param_bounds):
                 low, high = param_bounds[i]
                 # Mutación gaussiana con límites
                 mutation_strength = 0.1 * (high - low)
-                mutation = rs.normal(0, mutation_strength)
+                mutation = rs.standard_normal() * mutation_strength
                 mutated[i] = mutated[i] + mutation
                 # Aplicar límites
                 mutated[i] = cp.clip(mutated[i], low, high)

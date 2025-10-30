@@ -159,8 +159,8 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
     
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
 
-    task_id = os.environ.get('JOB_ID', 'default')
-    resultados_dir = f'resultados/task_{task_id}'
+    job_id = os.environ.get("SLURM_JOB_ID", None)
+    resultados_dir = f'resultados/task_{job_id}'
     os.makedirs(resultados_dir, exist_ok=True)
 
     # Si hay una población preentrenada la carga, sino se genera una nueva población inicial
@@ -257,6 +257,6 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
                            ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
 
     print(f'Resultados guardados en: {resultados_dir}')
-    print(f'Task ID: {task_id}')
+    print(f'JOB ID: {job_id}')
 
     return resultados
