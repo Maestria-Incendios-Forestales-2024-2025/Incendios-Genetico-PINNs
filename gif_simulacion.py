@@ -5,7 +5,7 @@ import cupyx.scipy.ndimage #type: ignore
 import matplotlib.pyplot as plt
 import imageio
 import os
-from Genetico.lectura_datos import preprocesar_datos
+from Genetico.config import ruta_mapas 
 
 ############################## FUNCIÓN PARA AGREGAR UNA DIMENSIÓN ###############################################
 
@@ -15,12 +15,40 @@ def create_batch(array_base, n_batch):
 
 ############################## CARGADO DE MAPAS ###############################################
 
-datos = preprocesar_datos()
-vegetacion = datos["vegetacion"]
-wx = datos["wx"]
-wy = datos["wy"]
-h_dx_mapa = datos["h_dx"]
-h_dy_mapa = datos["h_dy"]
+# Función para leer archivos .asc
+def leer_asc(ruta):
+    with open(ruta, 'r') as f:
+        # Leer el encabezado para obtener el tamaño de la grilla
+        for _ in range(6):  # Las primeras 6 líneas suelen contener los metadatos
+            f.readline()
+        
+        # Leer el resto de los datos y convertirlos a una matriz
+        data = np.loadtxt(f)  # Leer el archivo de datos en un array de numpy
+        return cp.array(data, dtype=cp.float32)
+
+# Leer los mapas
+datos = [leer_asc(mapa) for mapa in ruta_mapas]
+
+# Asignar cada matriz a una variable (e invertir verticalmente)
+vientod = cp.flipud(datos[0])
+vientov = cp.flipud(datos[1])
+pendiente = cp.flipud(datos[2])
+vegetacion = cp.flipud(datos[3])
+orientacion = cp.flipud(datos[4])
+
+# Convertir a radianes
+vientod_rad = vientod * cp.pi / 180
+# Componentes cartesianas del viento:
+# wx: componente Este-Oeste (positivo hacia el Este)
+# wy: componente Norte-Sur (positivo hacia el Norte)
+wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
+wy = -vientov * cp.cos(vientod_rad) * 1000  # Norte = cos(ángulo desde Norte)
+
+# Cálculo de la pendiente (usando mapas de pendiente y orientación)
+orientacion_rad = orientacion * cp.pi / 180
+
+h_dx_mapa = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad)
+h_dy_mapa = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad)
 
 # Obtener dimensiones del mapa
 ny, nx = vegetacion.shape  # Usamos cualquier mapa para obtener las dimensiones
