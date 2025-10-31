@@ -38,6 +38,13 @@ if "rocks7frontend" in hostname or "compute" in hostname:
         2: base_cluster + "R_referencia_2.npy",
         3: base_cluster + "R_referencia_3.npy",
     }
+elif "ccad.unc.edu.ar" in hostname:
+    base_ccad = "/home/lbecerra/Incendios-Genetico-PINNs/"
+    rutas = {
+        1: base_ccad + "R_referencia_1.npy",
+        2: base_ccad + "R_referencia_2.npy",
+        3: base_ccad + "R_referencia_3.npy",
+    }
 else:
     base_local = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/"
     rutas = {

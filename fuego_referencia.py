@@ -28,16 +28,16 @@ ny, nx = vegetacion.shape  # Usamos cualquier mapa para obtener las dimensiones
 # Tamaño de cada celda
 d = cp.float32(30) # metros
 # Coeficiente de difusión
-D_value = cp.float32(9.255) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
+D_value = cp.float32(10) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
 # beta_params = [1.189, 1.189, 1.189, 1.189, 1.189]
 # gamma_params = [0.497, 0.497, 0.497, 0.497, 0.497]
 
-# beta_params = [0.91, 0.72, 1.38, 1.94, 0.75]
-# gamma_params = [0.5, 0.38, 0.84, 0.45, 0.14]
+beta_params = [0.91, 0.72, 1.38, 1.94, 0.75]
+gamma_params = [0.5, 0.38, 0.84, 0.45, 0.14]
 
-beta_params = [0.724, 0.537, 0.970, 1.976, 0.893]
-gamma_params = [0.297, 0.185, 0.442, 0.428, 0.316]
+# beta_params = [0.724, 0.537, 0.970, 1.976, 0.893]
+# gamma_params = [0.297, 0.185, 0.442, 0.428, 0.316]
 
 veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
 beta_veg = cp.zeros_like(vegetacion, dtype=cp.float32)
@@ -69,10 +69,10 @@ gamma = cupyx.scipy.ndimage.gaussian_filter(gamma, sigma=10.0)
 dt = cp.float32(1/2) # Paso temporal
 
 # Constante A adimensional de viento
-A_value = cp.float32(0.982e-4) # 10^-3 está al doble del límite de estabilidad
+A_value = cp.float32(1e-4) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
-B_value = cp.float32(14.892) # m/h
+B_value = cp.float32(15) # m/h
 
 n_batch = 1
 
@@ -92,8 +92,8 @@ S_batch = cp.where(vegetacion <= 2, 0, S_batch)  # Celdas no vegetadas son susce
 print(f'Se cumple la condición de Courant para el término advectivo: {courant_batch(dt/2, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
 
 # Coordenadas del punto de ignición
-x_ignicion = cp.array([475, 565])
-y_ignicion = cp.array([550, 530])
+x_ignicion = cp.array([400])
+y_ignicion = cp.array([600])
 
 S_batch[:, y_ignicion, x_ignicion] = 0
 I_batch[:, y_ignicion, x_ignicion] = 1
@@ -177,7 +177,7 @@ for t in range(num_steps):
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-cp.save("R_bootstrap_3.npy", R_new_batch)
+cp.save("R_referencia_1.npy", R_new_batch)
 
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")
