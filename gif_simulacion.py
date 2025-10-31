@@ -86,10 +86,10 @@ gamma = cupyx.scipy.ndimage.gaussian_filter(gamma, sigma=10.0)
 dt = cp.float32(1/3) # Paso temporal
 
 # Constante A adimensional de viento
-A_value = cp.float32(2e-4) # 10^-3 está al doble del límite de estabilidad
+A_value = cp.float32(5e-4) # 10^-3 está al doble del límite de estabilidad
 
 # Constante B de pendiente
-B_value = cp.float32(35.637) # m/h
+B_value = cp.float32(15.637) # m/h
 
 n_batch = 1
 
