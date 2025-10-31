@@ -188,7 +188,7 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
 
 ############################## GUARDADO DE RESULTADOS ###############################################
 
-def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, ajustar_beta_gamma=True, ajustar_ignicion=True):
+def guardar_resultados(resultados, resultados_dir, gen, n_betas=4, n_gammas=4, ajustar_beta_gamma=True, ajustar_ignicion=True):
     """
     Guarda resultados en un archivo CSV.
     
