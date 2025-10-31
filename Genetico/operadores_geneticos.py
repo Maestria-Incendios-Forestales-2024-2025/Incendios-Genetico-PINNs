@@ -1,7 +1,7 @@
 import cupy as cp # type: ignore
 import random
 
-rs = cp.random.default_rng(seed=42)
+rs = cp.random.default_rng()
 
 ############################## ARMADO DE POBLACIÓN INICIAL ###############################################
 

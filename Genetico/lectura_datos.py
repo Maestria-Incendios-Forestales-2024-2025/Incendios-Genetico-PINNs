@@ -4,7 +4,7 @@ import cupy as cp # type: ignore
 import csv, os
 from operadores_geneticos import poblacion_inicial
 
-rs = cp.random.default_rng(seed=42)
+rs = cp.random.default_rng()
 
 ############################## LEER MAPAS RASTER ###############################################
 

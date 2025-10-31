@@ -9,7 +9,7 @@ from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada, leer
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modelo_rdc import courant
 
-rs = cp.random.default_rng(seed=42)
+rs = cp.random.default_rng()
 
 ############################## CARGADO DE MAPAS ###############################################
 
