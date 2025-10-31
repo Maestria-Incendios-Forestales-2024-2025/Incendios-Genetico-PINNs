@@ -366,7 +366,7 @@ def spread_infection_adi(S, I, R, S_new, I_new, R_new,
             vegetacion.ravel()
         )
     )
-
+    
     # --- Segundo semi-paso (dt/2) ---
     reaction_advection_kernel_raw(
         grid_diff_adv, threads_2d,
