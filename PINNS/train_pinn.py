@@ -459,11 +459,11 @@ def train_pinn(modo='forward',
         # total_loss, loss_phys, loss_ic, loss_bc, loss_data = model.closure(optimizer, data, params)
         total_loss, loss_phys, loss_ic, loss_bc, loss_data = model.closure(optimizer, data)
 
-        if epoch > 20000 and not pesos_actualizados:
-            print("Fijando pesos de pérdida para estabilizar entrenamiento.")
-            model.w_pde = torch.tensor(1.0, device=device).requires_grad_(False)
-            model.w_data = torch.tensor(10.0, device=device).requires_grad_(False)
-            pesos_actualizados = True
+        # if epoch > 20000 and not pesos_actualizados:
+            # print("Fijando pesos de pérdida para estabilizar entrenamiento.")
+            # model.w_pde = torch.tensor(1.0, device=device).requires_grad_(False)
+            # model.w_data = torch.tensor(10.0, device=device).requires_grad_(False)
+            # pesos_actualizados = True
             
         # Actualización de pesos temporales (con normalización para estabilidad)
         # partial_sums = torch.cumsum(temporal_losses.detach(), dim=0)  # sumatoria acumulada por bloques
