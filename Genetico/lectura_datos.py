@@ -66,7 +66,7 @@ def preprocesar_datos():
     }
 ############################## CARGA DE ARCHIVO PREENTRENADO ###############################################
 
-def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros, n_betas=5, n_gammas=5,
+def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros, n_betas=4, n_gammas=4,
                                   ajustar_beta_gamma=True, ajustar_ignicion=True):
     """
     Carga una población preentrenada desde un CSV con columnas:
