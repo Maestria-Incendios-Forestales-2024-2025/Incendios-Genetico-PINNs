@@ -29,7 +29,7 @@ class FireSpread_PINN(nn.Module):
         # inicialización de pesos como tensores en el device
         self.w_ic  = torch.tensor(0.0, device=device).requires_grad_(False)
         self.w_bc  = torch.tensor(0.0, device=device).requires_grad_(False)
-        self.w_pde = torch.tensor(100.0, device=device).requires_grad_(False)
+        self.w_pde = torch.tensor(10.0, device=device).requires_grad_(False)
         self.w_data = torch.tensor(1.0, device=device).requires_grad_(False)
 
         self.last_layer_weights = self.layers[-1].weight
