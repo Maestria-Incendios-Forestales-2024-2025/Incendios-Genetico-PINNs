@@ -44,10 +44,11 @@ def preprocesar_datos():
     wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
     wy = -vientov * cp.cos(vientod_rad) * 1000 # Norte = cos(ángulo desde Norte)
 
+    slope = pendiente / 100.0 # pendiente en porcentaje
     orientacion_rad = orientacion * cp.pi / 180
 
-    h_dx = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad)
-    h_dy = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad)
+    h_dx = -slope * cp.sin(orientacion_rad)
+    h_dy = -slope * cp.cos(orientacion_rad)
 
     # h_dx = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad - cp.pi/2)
     # h_dy = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad - cp.pi/2)
