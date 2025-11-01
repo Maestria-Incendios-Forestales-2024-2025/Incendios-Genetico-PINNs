@@ -75,8 +75,8 @@ d = cp.float32(30) # metros
 # Coeficiente de difusión
 D_value = cp.float32(10) # metros^2 / hora. Si la celda tiene 30 metros, en una hora avanza 1/3 del tamaño de la celda
 
-# beta_params = [1.189, 1.189, 1.189, 1.189, 1.189]
-# gamma_params = [0.497, 0.497, 0.497, 0.497, 0.497]
+# beta_params = [1.5, 1.5, 1.5, 1.5, 1.5]
+# gamma_params = [0.5, 0.5, 0.5, 0.5, 0.5]
 
 beta_params = [0.91, 0.72, 1.38, 1.94, 0.75]
 gamma_params = [0.5, 0.38, 0.84, 0.45, 0.14]
@@ -137,8 +137,8 @@ S_batch = cp.where(vegetacion <= 2, 0, S_batch)  # Celdas no vegetadas son susce
 print(f'Se cumple la condición de Courant para el término advectivo: {courant_batch(dt/2, A, B, d, wx, wy, h_dx_mapa, h_dy_mapa)}')
 
 # Coordenadas del punto de ignición
-x_ignicion = cp.array([400])
-y_ignicion = cp.array([600])
+x_ignicion = cp.array([1130, 1300, 620])
+y_ignicion = cp.array([290, 150, 280])
 
 S_batch[:, y_ignicion, x_ignicion] = 0
 I_batch[:, y_ignicion, x_ignicion] = 1
@@ -222,7 +222,7 @@ for t in range(num_steps):
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-cp.save("R_referencia_1.npy", R_new_batch)
+cp.save("R_referencia_3.npy", R_new_batch)
 
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")
