@@ -34,11 +34,16 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamm
     basados en los parámetros optimizados y el tipo de vegetación.
     
     Args:
-        parametros_batch: Lista de tuplas (D, A, B, x, y, beta_params, gamma_params)
+        parametros_batch: Lista de tuplas con parámetros por simulación.
+            - Exp1: (D, A, B, x, y)
+            - Exp2: (D, A, B, x, y, beta_val, gamma_val)
+            - Exp3: (D, A, B, x, y, beta_params, gamma_params)
         vegetacion: Mapa de tipos de vegetación (ny, nx)
+        ajustar_beta_gamma: Si True, usa los parámetros del batch
+        beta_fijo, gamma_fijo: Listas de valores fijos (solo Exp1)
     
     Returns:
-        beta_batch, gamma_batch: Arrays (batch_size, ny, nx) con valores mapeados
+        beta_batch, gamma_batch: Arrays (batch_size, ny, nx)
     """
     batch_size = len(parametros_batch)
     
@@ -46,57 +51,49 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamm
     beta_batch = cp.zeros((batch_size, ny, nx), dtype=cp.float32)
     gamma_batch = cp.zeros((batch_size, ny, nx), dtype=cp.float32)
     
-    # Obtener tipos únicos de vegetación
-    veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
+    # Tipos de vegetación
+    veg_ajustables = [3, 4, 6, 7]
+    veg_fijo = 5
     
-    # Para cada simulación en el batch
     for i, params in enumerate(parametros_batch):
-        # Inicializar con valores por defecto
         beta_map = cp.zeros_like(vegetacion, dtype=cp.float32)
         gamma_map = cp.zeros_like(vegetacion, dtype=cp.float32)
-        if ajustar_beta_gamma and len(params) == 7: # Exp2
-            beta_val = params[5]  # un solo valor escalar
-            gamma_val = params[6]  # un solo valor escalar
-            beta_map = cp.full_like(vegetacion, beta_val, dtype=cp.float32)
-            gamma_map = cp.full_like(vegetacion, gamma_val, dtype=cp.float32)
-        elif ajustar_beta_gamma and len(params) == 5: # Exp3
-            beta_params = params[3]  # Lista de betas por tipo de vegetación
-            gamma_params = params[4]  # Lista de gammas por tipo de vegetación
+
+        if ajustar_beta_gamma and len(params) == 7:
+            # --- Exp2: un solo valor global de beta y gamma ---
+            beta_val = params[5]
+            gamma_val = params[6]
+            beta_map[:] = beta_val
+            gamma_map[:] = gamma_val
+
+        elif ajustar_beta_gamma and len(params) == 5:
+            # --- Exp3: betas/gammas por tipo de vegetación ---
+            beta_params = params[3]  # [beta_3, beta_4, beta_6, beta_7]
+            gamma_params = params[4]  # [gamma_3, gamma_4, gamma_6, gamma_7]
             
-            # Mapear valores según tipo de vegetación
-            for j, veg_type in enumerate(veg_types):
-                veg_type = int(veg_type)
-                # Crear máscara para este tipo de vegetación
+            # Asignar los valores por tipo
+            for j, veg_type in enumerate(veg_ajustables):
                 mask = (vegetacion == veg_type)
-                
-                # Asignar valores si tenemos parámetros para este tipo
-                if j < len(beta_params) and j < len(gamma_params) and veg_type != 5:
-                    beta_map = cp.where(mask, beta_params[j], beta_map)
-                    gamma_map = cp.where(mask, gamma_params[j], gamma_map)
-                elif veg_type == 5:  # Tipo de vegetación 5
-                    beta_map = cp.where(mask, 1.0, beta_map)
-                    gamma_map = cp.where(mask, 0.5, gamma_map)
-        else: # Exp1
-            beta_params = beta_fijo  # Lista de betas por tipo de vegetación
-            gamma_params = gamma_fijo  # Lista de gammas por tipo de vegetación
+                beta_map = cp.where(mask, beta_params[j], beta_map)
+                gamma_map = cp.where(mask, gamma_params[j], gamma_map)
             
-            # Mapear valores según tipo de vegetación
-            for j, veg_type in enumerate(veg_types):
-                veg_type = int(veg_type)
-                # Crear máscara para este tipo de vegetación
+            # Tipo 5 con valores fijos
+            mask_5 = (vegetacion == veg_fijo)
+            beta_map = cp.where(mask_5, 1.0, beta_map)
+            gamma_map = cp.where(mask_5, 0.5, gamma_map)
+
+        else:
+            # --- Exp1: valores fijos para todos los tipos ---
+            for j, veg_type in enumerate([3, 4, 5, 6, 7]):
                 mask = (vegetacion == veg_type)
-                
-                # Asignar valores si tenemos parámetros para este tipo
-                if j < len(beta_params) and j < len(gamma_params):
-                    beta_map = cp.where(mask, beta_params[j], beta_map)
-                    gamma_map = cp.where(mask, gamma_params[j], gamma_map)
+                beta_map = cp.where(mask, beta_fijo[j], beta_map)
+                gamma_map = cp.where(mask, gamma_fijo[j], gamma_map)
         
         beta_batch[i] = beta_map
         gamma_batch[i] = gamma_map
 
+    # Suavizado de los mapas (opcional)
     sigma = (0, 10.0, 10.0)
-
-    # Suavizado de los mapas
     beta_batch = cupyx.scipy.ndimage.gaussian_filter(beta_batch, sigma=sigma)
     gamma_batch = cupyx.scipy.ndimage.gaussian_filter(gamma_batch, sigma=sigma)
 
