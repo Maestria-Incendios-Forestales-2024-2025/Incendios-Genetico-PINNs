@@ -1,8 +1,8 @@
-from Genetico.config import ruta_mapas
+from config import ruta_mapas
 import numpy as np # type: ignore
 import cupy as cp # type: ignore
 import csv, os
-from Genetico.operadores_geneticos import poblacion_inicial
+from operadores_geneticos import poblacion_inicial
 
 rs = cp.random.default_rng()
 
