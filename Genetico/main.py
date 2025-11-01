@@ -118,7 +118,7 @@ start_time = time.time()
 
 resultados = genetic_algorithm(
     tamano_poblacion=10000,
-    generaciones=12,
+    generaciones=50,
     limite_parametros=limite_parametros,
     ruta_incendio_referencia=ruta_incendio_referencia,
     archivo_preentrenado=archivo_preentrenado,
