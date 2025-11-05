@@ -4,10 +4,13 @@ from operadores_geneticos import poblacion_inicial, tournament_selection, crosso
 from fitness import aptitud_batch
 from config import d, dt
 from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada, leer_incendio_referencia, guardar_resultados
+import socket
 
 # Agregar el directorio padre al path para importar módulos
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modelo_rdc import courant
+
+hostname = socket.gethostname()
 
 rs = cp.random.default_rng()
 
@@ -159,7 +162,13 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
     
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
 
-    job_id = os.environ.get("SLURM_JOB_ID", None)
+    if "rocks7frontend" in hostname or "compute" in hostname:
+        job_id = os.environ.get('JOB_ID', 'default')
+    elif "ccad.unc.edu.ar" in hostname:
+        job_id = os.environ.get("SLURM_JOB_ID", None)
+    else:
+        job_id = 'default'
+        
     resultados_dir = f'resultados/task_{job_id}'
     os.makedirs(resultados_dir, exist_ok=True)
 
