@@ -1,8 +1,6 @@
 import cupy as cp # type: ignore
 import random
 
-rs = cp.random.default_rng()
-
 ############################## ARMADO DE POBLACIÓN INICIAL ###############################################
 
 def poblacion_inicial(tamano_poblacion, limite_parametros):
@@ -17,7 +15,7 @@ def poblacion_inicial(tamano_poblacion, limite_parametros):
     n_params = len(limite_parametros)
     
     # Genera números aleatorios uniformes en [0,1]
-    rand = rs.random((tamano_poblacion, n_params), dtype=cp.float32)
+    rand = cp.random.rand(tamano_poblacion, n_params, dtype=cp.float32)
     
     # Convierte límites a arrays
     lows  = cp.array([low for low, _ in limite_parametros], dtype=cp.float32)
@@ -65,7 +63,7 @@ def crossover(parent1, parent2):
     min_length = min(len(parent1), len(parent2))
     
     # Punto de cruce aleatorio (evitar los extremos)
-    point = int(rs.integers(1, min_length))
+    point = int(cp.random.randint(1, min_length))
     
     # Crear hijos intercambiando segmentos
     child1 = cp.concatenate((parent1[:point], parent2[point:min_length]))
@@ -88,18 +86,18 @@ def mutate(individual, mutation_rate, param_bounds):
     
     # Aplicar mutación a cada parámetro
     for i in range(len(mutated)):
-        if rs.random() < mutation_rate:
+        if cp.random.rand() < mutation_rate:
             # Verificar que tenemos límites para este parámetro
             if i < len(param_bounds):
                 low, high = param_bounds[i]
                 # Mutación gaussiana con límites
                 mutation_strength = 0.1 * (high - low)
-                mutation = rs.standard_normal() * mutation_strength
+                mutation = cp.random.normal(0, mutation_strength)
                 mutated[i] = mutated[i] + mutation
                 # Aplicar límites
                 mutated[i] = cp.clip(mutated[i], low, high)
             else:
                 # Si no hay límites definidos, mutación pequeña
-                mutated[i] += rs.uniform(-0.01, 0.01)
+                mutated[i] += cp.random.uniform(-0.01, 0.01)
 
     return mutated
