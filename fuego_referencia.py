@@ -2,7 +2,6 @@ from modelo_rdc import spread_infection_adi, courant_batch
 import numpy as np 
 import cupy as cp # type: ignore
 import cupyx.scipy.ndimage #type: ignore
-from Genetico.config import ruta_mapas
 import argparse
 
 # Obtengo la variable por línea de comando
@@ -67,6 +66,12 @@ def preprocesar_datos():
     }
 
 ############################## CARGADO DE MAPAS ###############################################
+
+ruta_mapas = ['mapas_steffen_martin/ang_wind.asc',
+              'mapas_steffen_martin/speed_wind.asc',
+              'mapas_steffen_martin/asc_slope.asc',
+              'mapas_steffen_martin/asc_CIEFAP.asc',
+              'mapas_steffen_martin/asc_aspect.asc'] 
 
 datos = preprocesar_datos()
 vegetacion = datos["vegetacion"]
