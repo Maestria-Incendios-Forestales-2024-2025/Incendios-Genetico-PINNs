@@ -53,10 +53,11 @@ hostname = socket.gethostname()
 # print(f"Leyendo mapa de incendio de referencia: {os.path.basename(ruta_incendio_referencia)}")
 
 if "ccad.unc.edu.ar" in hostname:
-    ruta_incendio_referencia = "/home/lbecerra/Incendios-Genetico-PINNs/mapas_steffen_martin/area_quemada_SM.asc"
+    # ruta_incendio_referencia = "/home/lbecerra/Incendios-Genetico-PINNs/mapas_steffen_martin/area_quemada_SM.asc"
+    ruta_incendio_referencia = "/home/lbecerra/Incendios-Genetico-PINNs/mapas_steffen_martin/cicatriz_SM_17-12-21.asc"
 else: 
-    ruta_incendio_referencia = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/area_quemada_SM.asc"
-    
+    # ruta_incendio_referencia = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/area_quemada_SM.asc"
+    ruta_incendio_referencia = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/mapas_steffen_martin/cicatriz_SM_17-12-21.asc"
 
 ############################## CARGA DE ARCHIVO PREENTRENADO ####################################
 
@@ -119,13 +120,13 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 resultados = genetic_algorithm(
-    tamano_poblacion=2000,
+    tamano_poblacion=5000,
     generaciones=40,
     limite_parametros=limite_parametros,
     ruta_incendio_referencia=ruta_incendio_referencia,
     archivo_preentrenado=archivo_preentrenado,
     generacion_preentrenada=generacion_preentranada,
-    num_steps=1920,
+    num_steps=480,
     batch_size=5,
     ajustar_beta_gamma=ajustar_beta_gamma,
     beta_fijo=beta_fijo if not ajustar_beta_gamma else None,
