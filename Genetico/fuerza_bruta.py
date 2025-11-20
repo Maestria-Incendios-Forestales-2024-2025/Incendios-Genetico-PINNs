@@ -109,8 +109,9 @@ elif exp == 3:
     ignicion_fija_x = [1130, 1300, 620]
     ignicion_fija_y = [290, 150, 280]
 
-    ignicion_fija_x = None
-    ignicion_fija_y = None
+    beta_fijo = None
+    gamma_fijo = None
+
 
 else:
     raise ValueError(f"Experimento {exp} no está definido")
