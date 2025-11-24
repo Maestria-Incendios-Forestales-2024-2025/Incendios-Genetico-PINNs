@@ -13,7 +13,7 @@ print(f"Using device: {device}")
 ############################## DEFINICIÓN DE LA PINN ###############################################
 
 temporal_domain = 10
-domain_size = 2
+domain_size = 1
 MAX_BLOCK_POINTS = 4096  # límite de puntos por bloque temporal para estabilidad de memoria
 
 class FireSpread_PINN(nn.Module):
@@ -23,13 +23,13 @@ class FireSpread_PINN(nn.Module):
         self.layers = nn.ModuleList()
         for i in range(len(layers) - 1):
             self.layers.append(nn.Linear(layers[i], layers[i+1]))
-        # self.activation = nn.Tanh()
-        self.activation = nn.SiLU()
+        self.activation = nn.Tanh()
+        # self.activation = nn.SiLU()
 
         # inicialización de pesos como tensores en el device
-        self.w_ic  = torch.tensor(0.0, device=device).requires_grad_(False)
-        self.w_bc  = torch.tensor(0.0, device=device).requires_grad_(False)
-        self.w_pde = torch.tensor(10.0, device=device).requires_grad_(False)
+        self.w_ic  = torch.tensor(1.0, device=device).requires_grad_(False)
+        self.w_bc  = torch.tensor(1.0, device=device).requires_grad_(False)
+        self.w_pde = torch.tensor(1.0, device=device).requires_grad_(False)
         self.w_data = torch.tensor(1.0, device=device).requires_grad_(False)
 
         self.last_layer_weights = self.layers[-1].weight
@@ -413,7 +413,7 @@ def train_pinn(modo='forward',
     pesos_actualizados = False
 
     for epoch in range(start_epoch, epochs_adam):
-        if epoch % 1000 == 0 and epoch > 10000: # Sampleo adaptativo cada 1000 épocas
+        if epoch % 500 == 0 and epoch > 500: #and epoch > 10000: # Sampleo adaptativo cada 1000 épocas
             x_interior, y_interior, t_interior = model.sample_by_nonlinearity(N_interior)
             x_interior.requires_grad_(True) 
             y_interior.requires_grad_(True)
@@ -497,24 +497,25 @@ def train_pinn(modo='forward',
         if epoch % 100 == 0 or epoch == epochs_adam - 1:
             print(
                 f"Adam Época {epoch} | Loss: {total_loss.item()} | "
-                f"PDE Loss: {loss_phys.item()} | "  #| IC Loss: {loss_ic.item()} | "
-                # f"BC Loss: {loss_bc.item()} | "
+                f"PDE Loss: {loss_phys.item()} | IC Loss: {loss_ic.item()} | "
+                f"BC Loss: {loss_bc.item()} | "
                 f"Data Loss: {loss_data.item() if model.mode == 'inverse' else 'N/A'} | "
                 f"D_I: {model.D_I_val.item() if model.mode == 'inverse' else model.D_I_val}"
             )
 
         last_epoch = epoch
 
-    print("🚀 Iniciando optimización de refinamiento con L-BFGS...")
-    optimizer_lbfgs.step(lbfgs_closure)
-    print("✅ Optimización L-BFGS completada.")
-    
-    np.save("loss_phys.npy", np.array(loss_phys_list))
-    np.save("loss_ic.npy", np.array(loss_ic_list))
-    np.save("loss_bc.npy", np.array(loss_bc_list))
-    np.save("loss_data.npy", np.array(loss_data_list))
-    np.save("D_I_history.npy", np.array(D_I_history))
+    # print("🚀 Iniciando optimización de refinamiento con L-BFGS...")
+    # optimizer_lbfgs.step(lbfgs_closure)
+    # print("✅ Optimización L-BFGS completada.")
 
+    job_id = os.environ.get('SLURM_JOB_ID', 'local')
+    
+    np.save(f"loss_phys_job{job_id}.npy", np.array(loss_phys_list))
+    np.save(f"loss_ic_job{job_id}.npy", np.array(loss_ic_list))
+    np.save(f"loss_bc_job{job_id}.npy", np.array(loss_bc_list))
+    np.save(f"loss_data_job{job_id}.npy", np.array(loss_data_list))
+    np.save(f"D_I_history_job{job_id}.npy", np.array(D_I_history))
     # Restaurar el mejor modelo en memoria
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
