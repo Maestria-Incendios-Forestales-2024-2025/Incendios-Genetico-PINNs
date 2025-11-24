@@ -92,6 +92,12 @@ elif exp == 2:
     limite_gamma = [(0.1, 0.9)]
     limite_parametros = limite_parametros_base + limite_ignicion + limite_beta + limite_gamma
 
+    beta_fijo = None
+    gamma_fijo = None
+
+    ignicion_fija_x = None
+    ignicion_fija_y = None
+
 elif exp == 3:
     ajustar_beta_gamma = True
     ajustar_ignicion = False
@@ -103,8 +109,8 @@ elif exp == 3:
     ignicion_fija_x = [1130, 1300, 620]
     ignicion_fija_y = [290, 150, 280]
 
-    ignicion_fija_x = None
-    ignicion_fija_y = None
+    beta_fijo = None
+    gamma_fijo = None
 
 else:
     raise ValueError(f"Experimento {exp} no está definido")
@@ -114,7 +120,7 @@ else:
 # Total de simulaciones y tamaño de bloque
 num_total_simulaciones = 100000
 tamano_bloque = 10000
-batch_size = 2
+batch_size = 5
 
 combinaciones = poblacion_inicial(num_total_simulaciones, limite_parametros) 
 
