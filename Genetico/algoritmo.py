@@ -11,8 +11,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modelo_rdc import courant
 
 hostname = socket.gethostname()
+<<<<<<< HEAD
 
 rs = cp.random.default_rng()
+=======
+>>>>>>> main_sin_rng
 
 ############################## CARGADO DE MAPAS ###############################################
 
@@ -33,13 +36,13 @@ def validate_courant_and_adjust(A, B):
     while not courant(dt/2, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
         iteraciones += 1
         # Alternativa más eficiente: seleccionar aleatoriamente entre 0, 1
-        param_idx = int(rs.integers(0, 2))  # 0, 1
+        param_idx = int(cp.random.randint(0, 2))  # 0, 1
 
         if param_idx == 0:  # A
-            A = float(A * float(rs.uniform(0.8, 0.99)))
+            A = float(A * float(cp.random.uniform(0.8, 0.99)))
         elif param_idx == 1:  # B
-            B = float(B * float(rs.uniform(0.8, 0.99)))
-        
+            B = float(B * float(cp.random.uniform(0.8, 0.99)))
+
         # Evitar bucles infinitos
         if iteraciones > 100:
             print(f"Warning: Validación Courant tomó {iteraciones} iteraciones")
@@ -52,7 +55,7 @@ def validate_ignition_point(x, y, incendio_referencia, limite_parametros):
     """Valida que el punto de ignición tenga combustible o que esté en el incendio de referencia."""
     lim_x, lim_y = limite_parametros[3], limite_parametros[4]
     while vegetacion[int(y), int(x)] <= 2 or incendio_referencia[int(y), int(x)] <= 0.001:
-        x, y = float(rs.integers(lim_x[0], lim_x[1])), float(rs.integers(lim_y[0], lim_y[1]))
+        x, y = float(cp.random.randint(lim_x[0], lim_x[1])), float(cp.random.randint(lim_y[0], lim_y[1]))
     return x, y
 
 ############################## VALIDACIÓN DE BETA Y GAMMA ###############################################

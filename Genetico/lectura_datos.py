@@ -4,8 +4,6 @@ import cupy as cp # type: ignore
 import csv, os
 from operadores_geneticos import poblacion_inicial
 
-rs = cp.random.default_rng()
-
 ############################## LEER MAPAS RASTER ###############################################
 
 def leer_asc(ruta):
@@ -156,7 +154,7 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
 
     if num_cargados > tamano_poblacion:
         print(f"[DEBUG] Se cargaron {num_cargados}, recortando a {tamano_poblacion}")
-        indices = rs.choice(num_cargados, tamano_poblacion, replace=False)
+        indices = cp.random.choice(num_cargados, tamano_poblacion, replace=False)
         poblacion_cargada = [poblacion_cargada[i] for i in indices.get()]
     elif num_cargados < tamano_poblacion:
         faltantes = tamano_poblacion - num_cargados

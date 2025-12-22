@@ -90,19 +90,19 @@ d = cp.float32(30) # metros
 # Paso temporal
 dt = cp.float32(1/2) # horas
 # Coeficiente de difusión
-D_value = cp.float32(10) # metros^2 / hora.
+D_value = cp.float32(12.065) # metros^2 / hora.
 # Constante A adimensional de viento
-A_value = cp.float32(1e-4) 
+A_value = cp.float32(0) 
 # Constante B de pendiente
-B_value = cp.float32(15) # m/h
+B_value = cp.float32(0) # m/h
 
 # Tasas de ignición y extinción según experimento
 if exp == 1 or exp == 3:
-    beta_params = [0.91, 0.72, 1.38, 1.94, 0.75]
-    gamma_params = [0.5, 0.38, 0.84, 0.45, 0.14]
+    beta_params = [0.797, 0.1, 1.5, 0.1, 2.606]
+    gamma_params = [0.537, 0.089, 0.5, 0.089, 0.1]
 elif exp == 2:
-    beta_params = [1.5, 1.5, 1.5, 1.5, 1.5]
-    gamma_params = [0.5, 0.5, 0.5, 0.5, 0.5]
+    beta_params = [1.002, 1.002, 1.002, 1.002, 1.002]
+    gamma_params = [0.418, 0.418, 0.418, 0.418, 0.418]
 
 # Crear mapas de beta y gamma según tipo de vegetación
 veg_types = cp.array([3, 4, 5, 6, 7], dtype=cp.int32)
@@ -145,17 +145,17 @@ print(f'Se cumple la condición de Courant para el término advectivo: {courant_
 
 # Coordenadas del punto de ignición según experimento
 if exp == 1 or exp == 2:
-    x_ignicion = cp.array([400])
-    y_ignicion = cp.array([600])
+    x_ignicion = cp.array([402])
+    y_ignicion = cp.array([601])
 elif exp == 3:
-    x_ignicion = cp.array([1130, 1300, 620])
-    y_ignicion = cp.array([290, 150, 280])
+    x_ignicion = cp.array([475,550])
+    y_ignicion = cp.array([565,530])
 
 S_batch[:, y_ignicion, x_ignicion] = 0
 I_batch[:, y_ignicion, x_ignicion] = 1
 
 # Inicializar arrays de cupy para almacenar los resultados
-num_steps = 500
+num_steps = 1920
 
 # Definir arrays de estado
 S_new_batch = cp.empty_like(S_batch)
@@ -182,7 +182,7 @@ for t in range(num_steps):
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-cp.save(f"R_referencia_{exp}.npy", R_new_batch)
+cp.save(f"R_bootstrap_{exp}.npy", R_new_batch)
 
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")
@@ -193,7 +193,10 @@ print(f'Numero de celdas quemadas: {cp.sum(R_new_batch > 0.001)}')
 
 if visualizar_mapas:
     import matplotlib.pyplot as plt
+    import scienceplots
     
+    plt.style.use(['science', 'ieee'])
+
     # Definir los nuevos colores para los valores del archivo (0 a 7)
     vegetation_colors = np.array([
         [255, 0, 255],      # 0: NODATA (magenta)
@@ -235,9 +238,9 @@ if visualizar_mapas:
     if exp == 1 or exp == 2:
         ax.scatter([400], [600], color='red', marker='*', s=10, edgecolors='black', linewidths=0.5)
     elif exp == 3:
-        ax.scatter([1130, 1300, 620], [290, 150, 280], color='red', marker='*', s=10, edgecolors='black', linewidths=0.5)
+        ax.scatter([475,550], [565,530], color='red', marker='*', s=10, edgecolors='black', linewidths=0.5)
 
     plt.tight_layout()
-    plt.savefig(f'R_referencia_{exp}_map.pdf', dpi=600, bbox_inches='tight')
+    plt.savefig(f'R_ajuste_real_{exp}_map.pdf', dpi=600, bbox_inches='tight')
     plt.show()
 
