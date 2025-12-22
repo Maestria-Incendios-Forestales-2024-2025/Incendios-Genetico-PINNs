@@ -48,7 +48,7 @@ else:
     rutas = {
         1: base_local + "R_referencia_1.npy",
         2: base_local + "R_referencia_2.npy",
-        3: base_local + "R_referencia_3.npy",
+        3: base_local + "mapas_steffen_martin/cicatriz_SM_17-12-21.asc",
     }
 
 # Selecciono la ruta según EXP
@@ -63,7 +63,7 @@ B_max = float(d / (cp.sqrt(2)*dt/2*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2)))) 
 ############################## DISEÑO DE EXPERIMENTOS ##########################################
 
 limite_parametros_base = [
-    (0.01, 100.0),          # D
+    (0.01, 20.0),          # D
     (0.0, A_max * cota),    # A
     (0.0, B_max * cota)     # B
 ]
@@ -106,8 +106,8 @@ elif exp == 3:
     limite_gamma = [(0.1, 0.9)] * 5
     limite_parametros = limite_parametros_base + limite_beta + limite_gamma
 
-    ignicion_fija_x = [1130, 1300, 620]
-    ignicion_fija_y = [290, 150, 280]
+    ignicion_fija_x = [475,550]
+    ignicion_fija_y = [565,530]
 
     beta_fijo = None
     gamma_fijo = None
@@ -118,9 +118,9 @@ else:
 ############################## PARÁMETROS DE LOS INCENDIOS SIMULADOS ###############################################
 
 # Total de simulaciones y tamaño de bloque
-num_total_simulaciones = 100000
-tamano_bloque = 10000
-batch_size = 5
+num_total_simulaciones = 100
+tamano_bloque = 100
+batch_size = 3
 
 combinaciones = poblacion_inicial(num_total_simulaciones, limite_parametros) 
 
@@ -131,7 +131,7 @@ end = cp.cuda.Event()
 
 start.record()
 
-num_steps = 500
+num_steps = 480
 
 if "rocks7frontend" in hostname or "compute" in hostname:
     job_id = os.environ.get('JOB_ID', 'default')
