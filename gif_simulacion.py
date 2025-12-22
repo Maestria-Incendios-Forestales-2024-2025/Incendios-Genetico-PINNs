@@ -162,38 +162,17 @@ y_ignicion = cp.array([600])
 S_batch[:, y_ignicion, x_ignicion] = 0
 I_batch[:, y_ignicion, x_ignicion] = 1
 
-# var_poblacion = 0
-
 # Inicializar arrays de cupy para almacenar los resultados
 num_steps = 2000
-# pob_total = cp.zeros(num_steps)
-# S_total = cp.zeros(num_steps)
-# I_total = cp.zeros(num_steps)
-# R_total = cp.zeros(num_steps)
 
 # Definir arrays de estado
 S_new_batch = cp.empty_like(S_batch)
 I_new_batch = cp.empty_like(I_batch)
 R_new_batch = cp.empty_like(R_batch)
 
-# celdas_rotas = cp.zeros(S.shape[0], dtype=cp.int32)
-
 beta_veg_batch = create_batch(beta_veg, n_batch)
 gamma_batch = create_batch(gamma, n_batch)
 
-# print(f'El array es contiguo: {vegetacion.flags.c_contiguous}')
-
-# Sumas por batch
-# suma_S = S.sum(axis=(1,2)) / (nx*ny)  # array de tamaño n_batch
-# suma_I = I.sum(axis=(1,2)) / (nx*ny)
-# suma_R = R.sum(axis=(1,2)) / (nx*ny)
-# suma_total = suma_S + suma_I + suma_R
-
-# for b in range(S.shape[0]):
-#     print(f"batch {b}: Total = {suma_total[b]:.3f}, S = {suma_S[b]:.3f}, I = {suma_I[b]:.3f}, R = {suma_R[b]:.3f}")
-#     print(f'  S: min={S[b].min():.3f}, max={S[b].max():.3f}')
-#     print(f'  I: min={I[b].min():.3f}, max={I[b].max():.3f}')
-#     print(f'  R: min={R[b].min():.3f}, max={R[b].max():.3f}')
 
 start = cp.cuda.Event()
 end = cp.cuda.Event()
@@ -210,35 +189,6 @@ for t in range(num_steps):
     S_batch, S_new_batch = S_new_batch, S_batch
     I_batch, I_new_batch = I_new_batch, I_batch
     R_batch, R_new_batch = R_new_batch, R_batch
-
-    # # Revisar por batch
-    # for b in range(S.shape[0]):
-    #     if not cp.all((S[b] <= 1) & (S[b] >= 0)):
-    #         celdas_rotas[b] += cp.sum((S[b] < 0) | (S[b] > 1))
-    #     if not cp.all((I[b] <= 1) & (I[b] >= 0)):
-    #         celdas_rotas[b] += cp.sum((I[b] < 0) | (I[b] > 1))
-    #     if not cp.all((R[b] <= 1) & (R[b] >= 0)):
-    #         celdas_rotas[b] += cp.sum((R[b] < 0) | (R[b] > 1))
-
-    # # Sumas por batch
-    # suma_S = S.sum(axis=(1,2)) / (nx*ny)  # array de tamaño n_batch
-    # suma_I = I.sum(axis=(1,2)) / (nx*ny)
-    # suma_R = R.sum(axis=(1,2)) / (nx*ny)
-    # suma_total = suma_S + suma_I + suma_R
-
-    # pob_total[t] = suma_total.mean()  # promedio sobre batches
-    # S_total[t] = suma_S.mean()
-    # I_total[t] = suma_I.mean()
-    # R_total[t] = suma_R.mean()
-
-    # if (t % 100 == 0) or (t == num_steps - 1):
-    #     for b in range(S.shape[0]):
-    #       print(f"Paso {t}, batch {b}: Total = {suma_total[b]:.3f}, S = {suma_S[b]:.3f}, I = {suma_I[b]:.3f}, R = {suma_R[b]:.3f}")
-    #       print(f'  S: min={S[b].min():.3f}, max={S[b].max():.3f}')
-    #       print(f'  I: min={I[b].min():.3f}, max={I[b].max():.3f}')
-    #       print(f'  R: min={R[b].min():.3f}, max={R[b].max():.3f}')
-
-    # var_poblacion += cp.abs(pob_total[t] - pob_total[t-1]) if t > 0 else 0
 
     if t % 20 == 0:
         # Graficar la grilla de infectados
@@ -280,13 +230,7 @@ with imageio.get_writer('simulacion.gif', mode='I', duration=0.1, loop=0) as wri
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo
 
-# cp.save("R_bootstrap_exp_1.npy", R_new_batch)
-
 gpu_time = cp.cuda.get_elapsed_time(start, end)  # Tiempo en milisegundos
 print(f"Tiempo en GPU: {gpu_time:.3f} ms")
 
-# var_poblacion_promedio = var_poblacion / num_steps
-
-# print(f'Variación de población promedio: {var_poblacion_promedio}')
-# print(f'Número de celdas rotas: {celdas_rotas}')
 print(f'Numero de celdas quemadas: {cp.sum(R_new_batch > 0.001)}')
