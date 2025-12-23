@@ -1,10 +1,11 @@
 import cupy as cp # type: ignore
-import csv, os
+import os
 from lectura_datos import preprocesar_datos, guardar_resultados
 from operadores_geneticos import poblacion_inicial
 from algoritmo import procesar_poblacion_batch
 from config import cota, d, dt
-import socket, argparse
+import argparse
+from pathlib import Path
 
 print(cp.cuda.runtime.getDeviceProperties(0)['name'])
 
@@ -25,35 +26,17 @@ h_dy_mapa = datos["h_dy"]
 
 ############################## INCENDIO DE REFERENCIA ####################################################
 
-# Detecto dónde estoy corriendo
-hostname = socket.gethostname()
-print(hostname)
+# directorio del archivo actual (Genetico/)
+BASE_DIR = Path(__file__).resolve().parent
 
-if "rocks7frontend" in hostname or "compute" in hostname:
-    base_cluster = "/home/lucas.becerra/Incendios-Genetico-PINNs/"
-    rutas = {
-        1: base_cluster + "R_referencia_1.npy",
-        2: base_cluster + "R_referencia_2.npy",
-        3: base_cluster + "R_referencia_3.npy",
-    }
-elif "ccad.unc.edu.ar" in hostname:
-    base_ccad = "/home/lbecerra/Incendios-Genetico-PINNs/"
-    rutas = {
-        1: base_ccad + "R_referencia_1.npy",
-        2: base_ccad + "R_referencia_2.npy",
-        3: base_ccad + "R_referencia_3.npy",
-    }
-else:
-    base_local = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/"
-    rutas = {
-        1: base_local + "R_referencia_1.npy",
-        2: base_local + "R_referencia_2.npy",
-<<<<<<< HEAD
-        3: base_local + "R_referencia_3.npy",
-=======
-        3: base_local + "mapas_steffen_martin/cicatriz_SM_17-12-21.asc",
->>>>>>> main_sin_rng
-    }
+# directorio padre (raíz del proyecto)
+PROJECT_DIR = BASE_DIR.parent
+
+rutas = {
+    1: PROJECT_DIR / "R_referencia_1.npy",
+    2: PROJECT_DIR / "R_referencia_2.npy",
+    3: PROJECT_DIR / "R_referencia_3.npy",
+}
 
 # Selecciono la ruta según EXP
 ruta_incendio_referencia = rutas[exp]
@@ -67,11 +50,7 @@ B_max = float(d / (cp.sqrt(2)*dt/2*cp.max(cp.sqrt(h_dx_mapa**2+h_dy_mapa**2)))) 
 ############################## DISEÑO DE EXPERIMENTOS ##########################################
 
 limite_parametros_base = [
-<<<<<<< HEAD
     (0.01, 100.0),          # D
-=======
-    (0.01, 20.0),          # D
->>>>>>> main_sin_rng
     (0.0, A_max * cota),    # A
     (0.0, B_max * cota)     # B
 ]
@@ -114,36 +93,21 @@ elif exp == 3:
     limite_gamma = [(0.1, 0.9)] * 5
     limite_parametros = limite_parametros_base + limite_beta + limite_gamma
 
-<<<<<<< HEAD
     ignicion_fija_x = [1130, 1300, 620]
     ignicion_fija_y = [290, 150, 280]
-=======
-    ignicion_fija_x = [475,550]
-    ignicion_fija_y = [565,530]
->>>>>>> main_sin_rng
 
     beta_fijo = None
     gamma_fijo = None
 
-<<<<<<< HEAD
-
-=======
->>>>>>> main_sin_rng
 else:
     raise ValueError(f"Experimento {exp} no está definido")
 
 ############################## PARÁMETROS DE LOS INCENDIOS SIMULADOS ###############################################
 
 # Total de simulaciones y tamaño de bloque
-<<<<<<< HEAD
 num_total_simulaciones = 100000
 tamano_bloque = 10000
 batch_size = 2
-=======
-num_total_simulaciones = 100
-tamano_bloque = 100
-batch_size = 3
->>>>>>> main_sin_rng
 
 combinaciones = poblacion_inicial(num_total_simulaciones, limite_parametros) 
 
@@ -154,20 +118,9 @@ end = cp.cuda.Event()
 
 start.record()
 
-<<<<<<< HEAD
 num_steps = 500
-=======
-num_steps = 480
->>>>>>> main_sin_rng
-
-if "rocks7frontend" in hostname or "compute" in hostname:
-    job_id = os.environ.get('JOB_ID', 'default')
-elif "ccad.unc.edu.ar" in hostname:
-    job_id = os.environ.get("SLURM_JOB_ID", None)
-else:
-    job_id = 'default'
         
-resultados_dir = f'resultados/fuerza_bruta_task_{job_id}'
+resultados_dir = f'resultados/fuerza_bruta_task_{exp}'
 os.makedirs(resultados_dir, exist_ok=True)
 
 # Loop por bloques
@@ -199,20 +152,13 @@ for i in range(0, num_total_simulaciones, tamano_bloque):
     # Guardar resultados de este bloque
     bloque_id = inicio // tamano_bloque
 
-    # Intentar convertir a entero
-    try:
-        job_id = int(job_id)
-    except (TypeError, ValueError):
-        job_id = 0  # o algún valor por defecto numérico
-
-    num_archivo = job_id + bloque_id
+    num_archivo = i + bloque_id
 
     guardar_resultados(resultados, resultados_dir, num_archivo, 
                        ajustar_beta_gamma=ajustar_beta_gamma,
                        ajustar_ignicion=ajustar_ignicion)
 
     print(f'Resultados guardados en: {resultados_dir}')
-    print(f'Task ID: {job_id}')
 
 end.record()  # Marca el final en GPU
 end.synchronize() # Sincroniza y mide el tiempo

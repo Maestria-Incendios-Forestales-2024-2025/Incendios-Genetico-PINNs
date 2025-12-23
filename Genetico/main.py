@@ -3,8 +3,9 @@ import time
 from config import d, dt, cota
 from lectura_datos import preprocesar_datos
 from algoritmo import genetic_algorithm
-import socket, os
+import os
 import argparse
+from pathlib import Path
 
 print(cp.cuda.runtime.getDeviceProperties(0)['name'])
 
@@ -27,31 +28,17 @@ h_dy_mapa = datos["h_dy"]
 
 ############################## INCENDIO DE REFERENCIA ####################################################
 
-# Detecto dónde estoy corriendo
-hostname = socket.gethostname()
-print(hostname)
+# directorio del archivo actual (Genetico/)
+BASE_DIR = Path(__file__).resolve().parent
 
-if "rocks7frontend" in hostname or "compute" in hostname:
-    base_cluster = "/home/lucas.becerra/Incendios-Genetico-PINNs/"
-    rutas = {
-        1: base_cluster + "R_referencia_1.npy",
-        2: base_cluster + "R_referencia_2.npy",
-        3: base_cluster + "R_referencia_3.npy",
-    }
-elif "ccad.unc.edu.ar" in hostname:
-    base_ccad = "/home/lbecerra/Incendios-Genetico-PINNs/"
-    rutas = {
-        1: base_ccad + "R_referencia_1.npy",
-        2: base_ccad + "R_referencia_2.npy",
-        3: base_ccad + "R_referencia_3.npy",
-    }
-else:
-    base_local = "c:/Users/becer/OneDrive/Desktop/Maestría en Ciencias Físicas/Tesis/Incendios-Forestales---MCF-2024-2025/"
-    rutas = {
-        1: base_local + "R_referencia_1.npy",
-        2: base_local + "R_referencia_2.npy",
-        3: base_local + "R_referencia_3.npy",
-    }
+# directorio padre (raíz del proyecto)
+PROJECT_DIR = BASE_DIR.parent
+
+rutas = {
+    1: PROJECT_DIR / "R_referencia_1.npy",
+    2: PROJECT_DIR / "R_referencia_2.npy",
+    3: PROJECT_DIR / "R_referencia_3.npy",
+}
 
 # Selecciono la ruta según EXP
 ruta_incendio_referencia = rutas[exp]

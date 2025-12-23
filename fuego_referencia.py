@@ -2,6 +2,7 @@ from modelo_rdc import spread_infection_adi, courant_batch
 import numpy as np 
 import cupy as cp # type: ignore
 import cupyx.scipy.ndimage #type: ignore
+from mapas.io_mapas import preprocesar_datos
 import argparse
 
 # Obtengo la variable por línea de comando
@@ -18,60 +19,6 @@ visualizar_mapas = args.visualizar_mapas
 def create_batch(array_base, n_batch):
     # Se repite array_base n_batch veces en un bloque contiguo
     return cp.tile(array_base[cp.newaxis, :, :], (n_batch, 1, 1)).copy()
-
-############################## LEER MAPAS RASTER ###############################################
-
-def leer_asc(ruta):
-    with open(ruta, 'r') as f:
-        for _ in range(6):  
-            f.readline()
-        data = np.loadtxt(f) 
-        return cp.array(data, dtype=cp.float32) 
-
-############################## CALCULO A PARTIR DE MAPAS ###############################################
-
-def preprocesar_datos():
-    datos = [leer_asc(m) for m in ruta_mapas]
-    vientod, vientov, pendiente, vegetacion, orientacion = datos
-
-    # Parámetros derivados
-    beta_veg = cp.where(vegetacion <= 2, 0, 0.1 * vegetacion)
-    gamma = cp.where(vegetacion <= 2, 100, 0.1)
-
-    vientod_rad = vientod * cp.pi / 180
-    # Componentes cartesianas del viento:
-    wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
-    wy = -vientov * cp.cos(vientod_rad) * 1000 # Norte = cos(ángulo desde Norte)
-
-    slope = pendiente / 100.0 # pendiente en porcentaje
-    orientacion_rad = orientacion * cp.pi / 180
-
-    h_dx = -slope * cp.sin(orientacion_rad)
-    h_dy = -slope * cp.cos(orientacion_rad)
-
-    return {
-        "vientod": cp.flipud(vientod),
-        "vientov": cp.flipud(vientov),
-        "pendiente": cp.flipud(pendiente),
-        "vegetacion": cp.flipud(vegetacion),
-        "orientacion": cp.flipud(orientacion),
-        "beta_veg": cp.flipud(beta_veg),
-        "gamma": cp.flipud(gamma),
-        "wx": cp.flipud(wx),
-        "wy": cp.flipud(wy),
-        "h_dx": cp.flipud(h_dx),
-        "h_dy": cp.flipud(h_dy),
-        "ny": vientod.shape[0],
-        "nx": vientod.shape[1],
-    }
-
-############################## CARGADO DE MAPAS ###############################################
-
-ruta_mapas = ['mapas_steffen_martin/ang_wind.asc',
-              'mapas_steffen_martin/speed_wind.asc',
-              'mapas_steffen_martin/asc_slope.asc',
-              'mapas_steffen_martin/asc_CIEFAP.asc',
-              'mapas_steffen_martin/asc_aspect.asc'] 
 
 datos = preprocesar_datos()
 vegetacion = datos["vegetacion"]
@@ -243,4 +190,3 @@ if visualizar_mapas:
     plt.tight_layout()
     plt.savefig(f'R_referencia_{exp}_map.pdf', transparent=True, dpi=600, bbox_inches='tight')
     plt.show()
-

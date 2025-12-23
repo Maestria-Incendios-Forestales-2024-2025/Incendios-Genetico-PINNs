@@ -1,8 +1,12 @@
-from config import ruta_mapas
 import numpy as np # type: ignore
 import cupy as cp # type: ignore
 import csv, os
 from operadores_geneticos import poblacion_inicial
+import sys
+
+# Agrega el directorio padre al path para importar módulos
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from mapas.io_mapas import ruta_mapas
 
 ############################## LEER MAPAS RASTER ###############################################
 
@@ -47,9 +51,6 @@ def preprocesar_datos():
 
     h_dx = -slope * cp.sin(orientacion_rad)
     h_dy = -slope * cp.cos(orientacion_rad)
-
-    # h_dx = cp.tan(pendiente * cp.pi / 180) * cp.cos(orientacion_rad - cp.pi/2)
-    # h_dy = cp.tan(pendiente * cp.pi / 180) * cp.sin(orientacion_rad - cp.pi/2)
 
     return {
         "vientod": cp.flipud(vientod),

@@ -11,11 +11,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modelo_rdc import courant
 
 hostname = socket.gethostname()
-<<<<<<< HEAD
-
-rs = cp.random.default_rng()
-=======
->>>>>>> main_sin_rng
 
 ############################## CARGADO DE MAPAS ###############################################
 
@@ -164,15 +159,8 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
                       ignicion_fija_x=None, ignicion_fija_y=None):
     
     """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
-
-    if "rocks7frontend" in hostname or "compute" in hostname:
-        job_id = os.environ.get('JOB_ID', 'default')
-    elif "ccad.unc.edu.ar" in hostname:
-        job_id = os.environ.get("SLURM_JOB_ID", None)
-    else:
-        job_id = 'default'
         
-    resultados_dir = f'resultados/task_{job_id}'
+    resultados_dir = f'resultados'
     os.makedirs(resultados_dir, exist_ok=True)
 
     # Si hay una población preentrenada la carga, sino se genera una nueva población inicial
@@ -269,6 +257,5 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
                            ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
 
     print(f'Resultados guardados en: {resultados_dir}')
-    print(f'Job ID: {job_id}')
 
     return resultados
