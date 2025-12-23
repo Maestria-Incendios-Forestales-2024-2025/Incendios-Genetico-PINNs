@@ -33,9 +33,9 @@ python fuego_referencia.py --exp 1 --visualizar_mapas
  | - `lectura_datos.py` - Carga una población entreenada y se encarga de guardarla luego de una corrida del algoritmo genético
  | - `operadores_geneticos.py` - Contiene la implementación de los operadores de selección, cruce y mutación
  | - `main.py` - Ejecuta el algoritmo genético. Corre cualquiera de los tres experimentos sintéticos descritos en la Tesis. Para correrlo se requiere el mapa de referencia generado por `fuego_referencia.py`. Para correrlo desde el directorio Genetico, hay que ejecutar: 
-  ```bash
- main.py --exp 1
-   ```
+```bash
+main.py --exp 1
+```
  | - `fuerza_bruta.py` — Exploración de parámetros por búsqueda exhaustiva (brute force). Para correrlo desde el directorio Genetico, hay que ejecutar:
   ```bash
   fuerza_bruta.py --exp 1
