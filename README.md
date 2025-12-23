@@ -21,33 +21,38 @@ python fuego_referencia.py --exp 1 --visualizar_mapas
 ```
 
 - `mapas/`
- |
- | - `mapas_steffen_martin` - Contiene los mapas raster utilizados
- | - `io_mapas.py` - Funciones de lectura y procesado de mapas
+  - `mapas_steffen_martin` - Contiene los mapas raster utilizados
+  - `io_mapas.py` - Funciones de lectura y procesado de mapas
 
-- `genetico/` - Contiene los scripts en python para ejecutar los métodos de fuerza bruta y el algoritmo genético
- |
- | - `algoritmo.py` - Itera el algoritmo genético utilizando los operadores evolutivos
- | - `config.py` - Contiene valores como el tamaño del paso temporal, la distancia entre celdas
- | - `fitness.py` - Realiza una simulación con una configuración dada de parámetros y calcula el fitness de cada configuración
- | - `lectura_datos.py` - Carga una población entreenada y se encarga de guardarla luego de una corrida del algoritmo genético
- | - `operadores_geneticos.py` - Contiene la implementación de los operadores de selección, cruce y mutación
- | - `main.py` - Ejecuta el algoritmo genético. Corre cualquiera de los tres experimentos sintéticos descritos en la Tesis. Para correrlo se requiere el mapa de referencia generado por `fuego_referencia.py`. Para correrlo desde el directorio Genetico, hay que ejecutar: 
-```bash
-main.py --exp 1
-```
- | - `fuerza_bruta.py` — Exploración de parámetros por búsqueda exhaustiva (brute force). Para correrlo desde el directorio Genetico, hay que ejecutar:
-  ```bash
-  fuerza_bruta.py --exp 1
-  ```
+- `genetico/` — Contiene los scripts en Python para ejecutar los métodos de fuerza bruta y el algoritmo genético
+  - `algoritmo.py` — Itera el algoritmo genético utilizando los operadores evolutivos
+  - `config.py` — Contiene valores como el tamaño del paso temporal y la distancia entre celdas
+  - `fitness.py` — Realiza una simulación con una configuración dada de parámetros y calcula el fitness
+  - `lectura_datos.py` — Carga una población entrenada y la guarda luego de una corrida del algoritmo genético
+  - `operadores_geneticos.py` — Implementación de los operadores de selección, cruce y mutación
+  - `main.py` — Ejecuta el algoritmo genético. Requiere el mapa de referencia generado por `fuego_referencia.py`.
+
+    Para ejecutar desde el directorio `genetico`:
+
+    ```bash
+    python main.py --exp 1
+    ```
+
+  - `fuerza_bruta.py` — Exploración exhaustiva del espacio de parámetros (*brute force*).
+
+    Para ejecutar:
+
+    ```bash
+    python fuerza_bruta.py --exp 1
+    ```
 
 - `pinns/` — Entrenamiento de redes neuronales informadas por la física (Physics-Informed Neural Networks, PINNs).
- |
- | - `train_pinn.py` - Modelo de PINN
- | - `pinns_sir.py` - Entrenamiento de la PINN. Para entrenar una PINN desde el directorio PINNS, hay que ejecutar:
- ```bash
- python pinns_sir.py
- ```
+  - `train_pinn.py` - Modelo de PINN
+  - `pinns_sir.py` - Entrenamiento de la PINN. Para entrenar una PINN desde el directorio PINNS, hay que ejecutar:
+ 
+  ```bash
+  python pinns_sir.py
+  ```
 
 - `.gitignore` — Ignora archivos temporales y entornos virtuales, de Python.
 - `README.md` — Este archivo.
