@@ -8,13 +8,13 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 # Directorio de mapas
 MAPAS_DIR = PROJECT_DIR / "mapas" / "mapas_steffen_martin"
 
-ruta_mapas = {
+ruta_mapas = [
     MAPAS_DIR / "ang_wind.asc",
     MAPAS_DIR / "speed_wind.asc",
     MAPAS_DIR / "asc_slope.asc",
     MAPAS_DIR / "asc_CIEFAP.asc",
     MAPAS_DIR / "asc_aspect.asc",
-}
+]
 
 ############################## LEER MAPAS RASTER ###############################################
 
@@ -30,10 +30,6 @@ def leer_asc(ruta):
 def preprocesar_datos():
     datos = [leer_asc(m) for m in ruta_mapas]
     vientod, vientov, pendiente, vegetacion, orientacion = datos
-
-    # Parámetros derivados
-    beta_veg = cp.where(vegetacion <= 2, 0, 0.1 * vegetacion)
-    gamma = cp.where(vegetacion <= 2, 100, 0.1)
 
     vientod_rad = vientod * cp.pi / 180
     # Componentes cartesianas del viento:
@@ -52,8 +48,6 @@ def preprocesar_datos():
         "pendiente": cp.flipud(pendiente),
         "vegetacion": cp.flipud(vegetacion),
         "orientacion": cp.flipud(orientacion),
-        "beta_veg": cp.flipud(beta_veg),
-        "gamma": cp.flipud(gamma),
         "wx": cp.flipud(wx),
         "wy": cp.flipud(wy),
         "h_dx": cp.flipud(h_dx),
