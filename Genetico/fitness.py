@@ -1,6 +1,5 @@
 import cupy as cp # type: ignore
 from config import d, dt
-from lectura_datos import preprocesar_datos
 import cupyx.scipy.ndimage # type: ignore
 import sys
 import os
@@ -15,20 +14,9 @@ def create_batch(array_base, n_batch):
     # Se repite array_base n_batch veces en un bloque contiguo
     return cp.tile(array_base[cp.newaxis, :, :], (n_batch, 1, 1)).copy()
 
-############################## CARGADO DE MAPAS ###############################################
-
-datos = preprocesar_datos()
-
-vegetacion = datos["vegetacion"]
-wx = datos["wx"]
-wy = datos["wy"]
-h_dx_mapa = datos["h_dx"]
-h_dy_mapa = datos["h_dy"]
-ny, nx = datos["ny"], datos["nx"]
-
 ############################## FUNCIÓN PARA MAPEAR PARÁMETROS DE VEGETACIÓN ###############################################
 
-def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
+def crear_mapas_parametros_batch(parametros_batch, ctx, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
     """
     Crea mapas de beta y gamma personalizados para cada simulación en el batch
     basados en los parámetros optimizados y el tipo de vegetación.
@@ -41,6 +29,8 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamm
         beta_batch, gamma_batch: Arrays (batch_size, ny, nx) con valores mapeados
     """
     batch_size = len(parametros_batch)
+    vegetacion = ctx.vegetacion
+    ny, nx = ctx.ny, ctx.nx
     
     # Crear arrays de salida
     beta_batch = cp.zeros((batch_size, ny, nx), dtype=cp.float32)
@@ -101,7 +91,7 @@ def crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamm
 
 ############################## CÁLCULO DE FUNCIÓN DE FITNESS POR BATCH ###############################################
 
-def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None,
+def aptitud_batch(parametros_batch, burnt_cells, ctx, num_steps=10000, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None,
                   ajustar_ignicion=True, ignicion_fija_x=None, ignicion_fija_y=None):
     """
     Calcula el fitness para múltiples combinaciones de parámetros en paralelo.
@@ -115,6 +105,12 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
     
     # Resto del código original...
     batch_size = len(parametros_batch)
+    vegetacion = ctx.vegetacion
+    wx = ctx.wx
+    wy = ctx.wy
+    h_dx_mapa = ctx.h_dx
+    h_dy_mapa = ctx.h_dy
+    ny, nx = ctx.ny, ctx.nx
 
     print(f'Batch size: {batch_size}')
     
@@ -141,7 +137,7 @@ def aptitud_batch(parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_g
     R_new_batch = cp.empty_like(R_batch)
     
     # Crear mapas de parámetros de vegetación personalizados
-    beta_batch, gamma_batch = crear_mapas_parametros_batch(parametros_batch, vegetacion, ajustar_beta_gamma=ajustar_beta_gamma,
+    beta_batch, gamma_batch = crear_mapas_parametros_batch(parametros_batch, ctx, ajustar_beta_gamma=ajustar_beta_gamma,
                                                            beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
 
     # Crear arrays de parámetros D, A, B para cada simulación

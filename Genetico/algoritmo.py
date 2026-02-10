@@ -3,7 +3,7 @@ import os, sys
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
 from fitness import aptitud_batch
 from config import d, dt
-from lectura_datos import preprocesar_datos, cargar_poblacion_preentrenada, leer_incendio_referencia, guardar_resultados
+from lectura_datos import cargar_poblacion_preentrenada, leer_incendio_referencia, guardar_resultados
 import socket
 
 # Agregar el directorio padre al path para importar módulos
@@ -12,23 +12,13 @@ from modelo_rdc import courant
 
 hostname = socket.gethostname()
 
-############################## CARGADO DE MAPAS ###############################################
-
-# Cargar datos necesarios para validación
-datos = preprocesar_datos()
-vegetacion = datos["vegetacion"]
-wx = datos["wx"]
-wy = datos["wy"]
-h_dx_mapa = datos["h_dx"]
-h_dy_mapa = datos["h_dy"]
-
 ############################## CHEQUEO DE CONDICIÓN DE COURANT ###############################################
 
-def validate_courant_and_adjust(A, B):
+def validate_courant_and_adjust(A, B, ctx):
     """Valida la condición de Courant y ajusta parámetros si es necesario."""
     
     iteraciones = 0
-    while not courant(dt/2, A, B, d, wx, wy, h_dx=h_dx_mapa, h_dy=h_dy_mapa):
+    while not courant(dt/2, A, B, d, ctx.wx, ctx.wy, h_dx=ctx.h_dx, h_dy=ctx.h_dy):
         iteraciones += 1
         # Alternativa más eficiente: seleccionar aleatoriamente entre 0, 1
         param_idx = int(cp.random.randint(0, 2))  # 0, 1
@@ -46,10 +36,10 @@ def validate_courant_and_adjust(A, B):
 
 ############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
 
-def validate_ignition_point(x, y, incendio_referencia, limite_parametros):
+def validate_ignition_point(x, y, incendio_referencia, limite_parametros, ctx):
     """Valida que el punto de ignición tenga combustible o que esté en el incendio de referencia."""
     lim_x, lim_y = limite_parametros[3], limite_parametros[4]
-    while vegetacion[int(y), int(x)] <= 2 or incendio_referencia[int(y), int(x)] <= 0.001:
+    while ctx.vegetacion[int(y), int(x)] <= 2 or incendio_referencia[int(y), int(x)] <= 0.001:
         x, y = float(cp.random.randint(lim_x[0], lim_x[1])), float(cp.random.randint(lim_y[0], lim_y[1]))
     return x, y
 
@@ -63,7 +53,7 @@ def validate_beta_gamma(betas, gammas):
 
 ############################## PROCESAMIENTO EN BATCH ###############################################
 
-def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_parametros, num_steps=10000, batch_size=10, 
+def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_parametros, ctx, num_steps=10000, batch_size=10, 
                              ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True,
                              ignicion_fija_x=None, ignicion_fija_y=None):
     """
@@ -108,22 +98,22 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
 
         if ajustar_beta_gamma and ajustar_ignicion:             # Exp2
             for D, A, B, x, y, betas, gammas in parametros_batch:
-                A, B = validate_courant_and_adjust(A, B)
-                x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
+                A, B = validate_courant_and_adjust(A, B, ctx)
+                x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros, ctx)
                 betas, gammas = validate_beta_gamma(betas, gammas)
                 parametros_validados.append((D, A, B, x, y, betas, gammas))
         elif ajustar_beta_gamma and not ajustar_ignicion:       # Exp3 
             for D, A, B, betas, gammas in parametros_batch:
-                A, B = validate_courant_and_adjust(A, B)
+                A, B = validate_courant_and_adjust(A, B, ctx)
                 betas, gammas = validate_beta_gamma(betas, gammas)
                 parametros_validados.append((D, A, B, betas, gammas))
         else:                                                   # Exp1
             for D, A, B, x, y in parametros_batch:
-                A, B = validate_courant_and_adjust(A, B)
-                x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros)
+                A, B = validate_courant_and_adjust(A, B, ctx)
+                x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros, ctx)
                 parametros_validados.append((D, A, B, x, y))
 
-        fitness_values = aptitud_batch(parametros_validados, celdas_quemadas_referencia, num_steps, 
+            fitness_values = aptitud_batch(parametros_validados, celdas_quemadas_referencia, ctx, num_steps, 
                                        ajustar_beta_gamma=ajustar_beta_gamma, beta_fijo=beta_fijo, gamma_fijo=gamma_fijo, 
                                        ajustar_ignicion=ajustar_ignicion, ignicion_fija_x=ignicion_fija_x, 
                                        ignicion_fija_y=ignicion_fija_y)
@@ -153,7 +143,7 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
 
 ############################## ALGORITMO GENÉTICO #########################################################
 
-def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia,
+def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, ctx,
                       archivo_preentrenado=None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
                       ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True, 
                       ignicion_fija_x=None, ignicion_fija_y=None):
@@ -169,7 +159,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
                                                    ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
     else:
         combinaciones = poblacion_inicial(tamano_poblacion, limite_parametros)
-        resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros,
+        resultados = procesar_poblacion_batch(combinaciones, ruta_incendio_referencia, limite_parametros, ctx,
                                               num_steps=num_steps, batch_size=batch_size, 
                                               ajustar_beta_gamma=ajustar_beta_gamma, 
                                               beta_fijo=beta_fijo, gamma_fijo=gamma_fijo, ajustar_ignicion=ajustar_ignicion,
@@ -218,7 +208,7 @@ def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_in
         population = cp.array(new_population)
 
         print(f"Procesando generación {gen+1} en batch...")
-        resultados = procesar_poblacion_batch(population, ruta_incendio_referencia, limite_parametros,
+        resultados = procesar_poblacion_batch(population, ruta_incendio_referencia, limite_parametros, ctx,
                                               num_steps=num_steps, batch_size=batch_size,
                                               ajustar_beta_gamma=ajustar_beta_gamma, 
                                               beta_fijo=beta_fijo, gamma_fijo=gamma_fijo, ajustar_ignicion=ajustar_ignicion,

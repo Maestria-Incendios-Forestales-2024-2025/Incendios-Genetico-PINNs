@@ -31,42 +31,6 @@ def leer_incendio_referencia(ruta):
         raise ValueError(f'Extensión no reconocida: {extension}')
     return mapa_incendio_referencia
     
-############################## CALCULO A PARTIR DE MAPAS ###############################################
-
-def preprocesar_datos():
-    datos = [leer_asc(m) for m in ruta_mapas]
-    vientod, vientov, pendiente, vegetacion, orientacion = datos
-
-    # Parámetros derivados
-    beta_veg = cp.where(vegetacion <= 2, 0, 0.1 * vegetacion)
-    gamma = cp.where(vegetacion <= 2, 100, 0.1)
-
-    vientod_rad = vientod * cp.pi / 180
-    # Componentes cartesianas del viento:
-    wx = -vientov * cp.sin(vientod_rad) * 1000  # Este = sin(ángulo desde Norte)
-    wy = -vientov * cp.cos(vientod_rad) * 1000 # Norte = cos(ángulo desde Norte)
-
-    slope = pendiente / 100.0 # pendiente en porcentaje
-    orientacion_rad = orientacion * cp.pi / 180
-
-    h_dx = -slope * cp.sin(orientacion_rad)
-    h_dy = -slope * cp.cos(orientacion_rad)
-
-    return {
-        "vientod": cp.flipud(vientod),
-        "vientov": cp.flipud(vientov),
-        "pendiente": cp.flipud(pendiente),
-        "vegetacion": cp.flipud(vegetacion),
-        "orientacion": cp.flipud(orientacion),
-        "beta_veg": cp.flipud(beta_veg),
-        "gamma": cp.flipud(gamma),
-        "wx": cp.flipud(wx),
-        "wy": cp.flipud(wy),
-        "h_dx": cp.flipud(h_dx),
-        "h_dy": cp.flipud(h_dy),
-        "ny": vientod.shape[0],
-        "nx": vientod.shape[1],
-    }
 ############################## CARGA DE ARCHIVO PREENTRENADO ###############################################
 
 def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros, n_betas=5, n_gammas=5,

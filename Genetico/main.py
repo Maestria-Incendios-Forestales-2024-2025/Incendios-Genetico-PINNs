@@ -1,8 +1,8 @@
 import cupy as cp # type: ignore
 import time
 from config import d, dt, cota
-from lectura_datos import preprocesar_datos
 from algoritmo import genetic_algorithm
+from data_context import DataContext
 import os
 import argparse
 from pathlib import Path
@@ -20,11 +20,11 @@ exp = args.exp
 
 ############################## CARGADO DE MAPAS #######################################################
 
-datos = preprocesar_datos()
-wx = datos["wx"]
-wy = datos["wy"]
-h_dx_mapa = datos["h_dx"]
-h_dy_mapa = datos["h_dy"]
+ctx = DataContext().load()
+wx = ctx.wx
+wy = ctx.wy
+h_dx_mapa = ctx.h_dx
+h_dy_mapa = ctx.h_dy
 
 ############################## INCENDIO DE REFERENCIA ####################################################
 
@@ -108,6 +108,7 @@ resultados = genetic_algorithm(
     generaciones=50,
     limite_parametros=limite_parametros,
     ruta_incendio_referencia=ruta_incendio_referencia,
+    ctx=ctx,
     archivo_preentrenado=archivo_preentrenado,
     generacion_preentrenada=generacion_preentranada,
     num_steps=500,
