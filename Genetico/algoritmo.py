@@ -1,55 +1,11 @@
 import cupy as cp  # type: ignore
-import os, sys
+import os
 from operadores_geneticos import poblacion_inicial, tournament_selection, crossover, mutate
-from fitness import aptitud_batch
-from config import d, dt
+from fitness import FitnessEvaluator
 from lectura_datos import cargar_poblacion_preentrenada, leer_incendio_referencia, guardar_resultados
 import socket
 
-# Agregar el directorio padre al path para importar módulos
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from modelo_rdc import courant
-
 hostname = socket.gethostname()
-
-############################## CHEQUEO DE CONDICIÓN DE COURANT ###############################################
-
-def validate_courant_and_adjust(A, B, ctx):
-    """Valida la condición de Courant y ajusta parámetros si es necesario."""
-    
-    iteraciones = 0
-    while not courant(dt/2, A, B, d, ctx.wx, ctx.wy, h_dx=ctx.h_dx, h_dy=ctx.h_dy):
-        iteraciones += 1
-        # Alternativa más eficiente: seleccionar aleatoriamente entre 0, 1
-        param_idx = int(cp.random.randint(0, 2))  # 0, 1
-
-        if param_idx == 0:  # A
-            A = float(A * float(cp.random.uniform(0.8, 0.99)))
-        elif param_idx == 1:  # B
-            B = float(B * float(cp.random.uniform(0.8, 0.99)))
-
-        # Evitar bucles infinitos
-        if iteraciones > 100:
-            print(f"Warning: Validación Courant tomó {iteraciones} iteraciones")
-            break
-    return A, B
-
-############################## VALIDACIÓN DE PUNTO DE IGNICIÓN ###############################################
-
-def validate_ignition_point(x, y, incendio_referencia, limite_parametros, ctx):
-    """Valida que el punto de ignición tenga combustible o que esté en el incendio de referencia."""
-    lim_x, lim_y = limite_parametros[3], limite_parametros[4]
-    while ctx.vegetacion[int(y), int(x)] <= 2 or incendio_referencia[int(y), int(x)] <= 0.001:
-        x, y = float(cp.random.randint(lim_x[0], lim_x[1])), float(cp.random.randint(lim_y[0], lim_y[1]))
-    return x, y
-
-############################## VALIDACIÓN DE BETA Y GAMMA ###############################################
-
-def validate_beta_gamma(betas, gammas):
-    """Valida los parámetros beta y gamma. Beta[i] > Gamma[i] para todo i"""
-    mask = gammas >= betas
-    gammas[mask] = 0.9 * betas[mask]
-    return betas, gammas
 
 ############################## PROCESAMIENTO EN BATCH ###############################################
 
@@ -67,6 +23,7 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
         Lista de resultados con fitness calculado
     """  
     resultados = []
+    evaluator = FitnessEvaluator(ctx)
 
     incendio_referencia = leer_incendio_referencia(ruta_incendio_referencia)
     celdas_quemadas_referencia = cp.where(incendio_referencia > 0.001, 1, 0)
@@ -98,22 +55,22 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
 
         if ajustar_beta_gamma and ajustar_ignicion:             # Exp2
             for D, A, B, x, y, betas, gammas in parametros_batch:
-                A, B = validate_courant_and_adjust(A, B, ctx)
-                x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros, ctx)
-                betas, gammas = validate_beta_gamma(betas, gammas)
+                A, B = evaluator.validate_courant_and_adjust(A, B)
+                x, y = evaluator.validate_ignition_point(x, y, incendio_referencia, limite_parametros)
+                betas, gammas = evaluator.validate_beta_gamma(betas, gammas)
                 parametros_validados.append((D, A, B, x, y, betas, gammas))
         elif ajustar_beta_gamma and not ajustar_ignicion:       # Exp3 
             for D, A, B, betas, gammas in parametros_batch:
-                A, B = validate_courant_and_adjust(A, B, ctx)
-                betas, gammas = validate_beta_gamma(betas, gammas)
+                A, B = evaluator.validate_courant_and_adjust(A, B)
+                betas, gammas = evaluator.validate_beta_gamma(betas, gammas)
                 parametros_validados.append((D, A, B, betas, gammas))
         else:                                                   # Exp1
             for D, A, B, x, y in parametros_batch:
-                A, B = validate_courant_and_adjust(A, B, ctx)
-                x, y = validate_ignition_point(x, y, incendio_referencia, limite_parametros, ctx)
+                A, B = evaluator.validate_courant_and_adjust(A, B)
+                x, y = evaluator.validate_ignition_point(x, y, incendio_referencia, limite_parametros)
                 parametros_validados.append((D, A, B, x, y))
 
-            fitness_values = aptitud_batch(parametros_validados, celdas_quemadas_referencia, ctx, num_steps, 
+        fitness_values = evaluator.evaluate_batch(parametros_validados, celdas_quemadas_referencia, num_steps, 
                                        ajustar_beta_gamma=ajustar_beta_gamma, beta_fijo=beta_fijo, gamma_fijo=gamma_fijo, 
                                        ajustar_ignicion=ajustar_ignicion, ignicion_fija_x=ignicion_fija_x, 
                                        ignicion_fija_y=ignicion_fija_y)
