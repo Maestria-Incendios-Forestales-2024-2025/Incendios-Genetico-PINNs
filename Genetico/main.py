@@ -7,7 +7,7 @@ import os
 import argparse
 from pathlib import Path
 
-print(cp.cuda.runtime.getDeviceProperties(0)['name'])
+print(f"Placa Gráfica: {cp.cuda.runtime.getDeviceProperties(0)['name']}")
 
 # Obtengo la variable por línea de comando
 parser = argparse.ArgumentParser()
@@ -104,8 +104,8 @@ cp.cuda.Stream.null.synchronize()
 start_time = time.time()
 
 resultados = genetic_algorithm(
-    tamano_poblacion=10000,
-    generaciones=50,
+    tamano_poblacion=10,
+    generaciones=10,
     limite_parametros=limite_parametros,
     ruta_incendio_referencia=ruta_incendio_referencia,
     ctx=ctx,

@@ -46,7 +46,10 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
                 betas, gammas = evaluator.validate_beta_gamma(betas, gammas)
                 parametros_validados.append((D, A, B, x, y, betas, gammas))
         elif ajustar_beta_gamma and not ajustar_ignicion:       # Exp3 
-            for D, A, B, betas, gammas in parametros_batch:
+            for genes in parametros_batch:
+                D, A, B = genes[0], genes[1], genes[2]
+                betas = genes[3:8]   # índices 3, 4, 5, 6, 7
+                gammas = genes[8:13] # índices 8, 9, 10, 11, 12
                 A, B = evaluator.validate_courant_and_adjust(A, B)
                 betas, gammas = evaluator.validate_beta_gamma(betas, gammas)
                 parametros_validados.append((D, A, B, betas, gammas))
@@ -167,7 +170,7 @@ class GeneticAlgorithm:
             print(f"Generación {gen}: Mejor fitness = {poblacion.best().fitness}")
 
             for i, ind in enumerate(poblacion.individuals, 1):
-                print(f"Individuo {i}: {ind.as_dict()}")
+                print(f"Individuo {i}: {ind.as_dict(self.ajustar_beta_gamma, self.ajustar_ignicion)}")
             
             guardar_resultados(poblacion, resultados_dir, gen - 1 + self.generacion_preentrenada,
                                ajustar_beta_gamma=self.ajustar_beta_gamma, 

@@ -14,7 +14,7 @@ class FitnessEvaluator:
 
     def validate_courant_and_adjust(self, A, B):
         """Valida la condición de Courant y ajusta parámetros si es necesario."""
-    
+        
         iteraciones = 0
         while not courant(dt/2, A, B, d, self.ctx.wx, self.ctx.wy, h_dx=self.ctx.h_dx, h_dy=self.ctx.h_dy):
             iteraciones += 1
@@ -22,9 +22,9 @@ class FitnessEvaluator:
             param_idx = int(cp.random.randint(0, 2))  # 0, 1
 
             if param_idx == 0:  # A
-                A = float(A * float(cp.random.uniform(0.8, 0.99)))
+                A = cp.array(A * float(cp.random.uniform(0.8, 0.99)), dtype=cp.float32)
             elif param_idx == 1:  # B
-                B = float(B * float(cp.random.uniform(0.8, 0.99)))
+                B = cp.array(B * float(cp.random.uniform(0.8, 0.99)), dtype=cp.float32)
 
         # Evitar bucles infinitos
             if iteraciones > 100:
