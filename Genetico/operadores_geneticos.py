@@ -45,17 +45,17 @@ class OnePointCrossover:
 ############################## MUTACIÓN #########################################################
 
 class GaussianMutation:
-    def __init__(self, mutation_rate):
-        self.mutation_rate = mutation_rate
+    def __init__(self):
+        pass
     
-    def mutate(self, individual, param_bounds):
+    def mutate(self, individual, mutation_rate, param_bounds):
         """Aplica una mutación aleatoria a los parámetros con una tasa dada"""
         # Crea una copia del individuo para no modificar el original
         mutated = individual.clone()
 
         # Aplicar mutación a cada parámetro
         for i in range(len(mutated)):
-            if cp.random.rand() < self.mutation_rate:
+            if cp.random.rand() < mutation_rate:
                 if i < len(param_bounds):
                     low, high = param_bounds[i]
 

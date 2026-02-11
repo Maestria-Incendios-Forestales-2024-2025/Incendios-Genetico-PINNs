@@ -90,99 +90,102 @@ class GeneticAlgorithm:
         self.ajustar_ignicion=ajustar_ignicion
         self.ignicion_fija_x=ignicion_fija_x
         self.ignicion_fija_y=ignicion_fija_y
+
+        # Operadores
+        self.selection_op = TournamentSelection()
+        self.crossover_op = OnePointCrossover()
+        self.mutation_op = GaussianMutation()
     
     def initialize(self):
-        # Si hay una población preentrenada la carga, sino se genera una nueva población inicial
-        if self.archivo_preentrenado:
-            poblacion = cargar_poblacion_preentrenada(self.archivo_preentrenado, self.tamano_poblacion, self.limite_parametros,
-                                                       ajustar_beta_gamma=self.ajustar_beta_gamma, ajustar_ignicion=self.ajustar_ignicion)
+        if self.archivo_preentrenado: # Si hay una población preentrenada la carga
+            poblacion = cargar_poblacion_preentrenada(
+                self.archivo_preentrenado, 
+                self.tamano_poblacion, 
+                self.limite_parametros,
+                ajustar_beta_gamma=self.ajustar_beta_gamma, 
+                ajustar_ignicion=self.ajustar_ignicion
+            )
         else: # Instancio la población inicial
             poblacion = Population.initial_population(self.tamano_poblacion, self.limite_parametros)
-            poblacion = procesar_poblacion_batch(poblacion, self.ruta_incendio_referencia, self.limite_parametros, self.ctx,
-                                                num_steps=self.num_steps, batch_size=self.batch_size, 
-                                                ajustar_beta_gamma=self.ajustar_beta_gamma, 
-                                                beta_fijo=self.beta_fijo, gamma_fijo=self.gamma_fijo, ajustar_ignicion=self.ajustar_ignicion,
-                                                ignicion_fija_x=self.ignicion_fija_x, ignicion_fija_y=self.ignicion_fija_y)
+            poblacion = self.evaluate_population(poblacion)
+        
+        return poblacion
+    
+    def evaluate_population(self, poblacion):
+        return procesar_poblacion_batch(
+            poblacion,
+            self.ruta_incendio_referencia,
+            self.limite_parametros,
+            self.ctx,
+            num_steps=self.num_steps,
+            batch_size=self.batch_size,
+            ajustar_beta_gamma=self.ajustar_beta_gamma,
+            beta_fijo=self.beta_fijo,
+            gamma_fijo=self.gamma_fijo,
+            ajustar_ignicion=self.ajustar_ignicion,
+            ignicion_fija_x=self.ignicion_fija_x,
+            ignicion_fija_y=self.ignicion_fija_y
+        )
+    
+    def produce_offspring(self, poblacion, mutation_rate):
+        new_population = []
+        for _ in range(self.tamano_poblacion // 2):
+            parent1 = self.selection_op.select(poblacion)
+            parent2 = self.selection_op.select(poblacion)
+            child1, child2 = self.crossover_op.apply(parent1, parent2)
+            child1 = self.mutation_op.mutate(child1, mutation_rate, self.limite_parametros)
+            new_population.extend([child1, child2])
+        return Population(new_population, generation=poblacion.generation + 1)
+    
+    def apply_elitism(self, poblacion, elite):
+        peor = poblacion.worst()
+        elite_clonada = elite.clone()
+        peor_idx = poblacion.individuals.index(peor)
+        poblacion.individuals[peor_idx] = elite_clonada
+        return poblacion
+    
+    def step(self, poblacion, mutation_rate, gen):
+        elite = poblacion.best()
+        nueva = self.produce_offspring(poblacion, mutation_rate)
+        nueva = self.evaluate_population(nueva)
+        nueva = self.apply_elitism(nueva, elite)
+        return nueva
+    
+    def run(self):
+        resultados_dir = "resultados"
+        os.makedirs(resultados_dir, exist_ok=True)
 
+        poblacion = self.initialize()
+        mutation_rate = 0.3 * 0.99**self.generacion_preentrenada
+
+        for gen in range(self.generaciones + 1):
+            if gen > 0:
+                print(f"Iniciando generación {gen}...")
+                poblacion = self.step(poblacion, mutation_rate, gen)
+                mutation_rate *= 0.99
+            
+            print(f"Generación {gen}: Mejor fitness = {poblacion.best().fitness}")
+
+            for i, ind in enumerate(poblacion.individuals, 1):
+                print(f"Individuo {i}: {ind.as_dict()}")
+            
+            guardar_resultados(poblacion, resultados_dir, gen - 1 + self.generacion_preentrenada,
+                               ajustar_beta_gamma=self.ajustar_beta_gamma, 
+                               ajustar_ignicion=self.ajustar_ignicion)
+            
+        print(f"Resultados guardados en: {resultados_dir}")
         return poblacion
 
 ############################## ALGORITMO GENÉTICO #########################################################
 
 def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, ctx,
-                      archivo_preentrenado=None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
-                      ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True, 
-                      ignicion_fija_x=None, ignicion_fija_y=None):
+                 archivo_preentrenado = None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
+                 ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True,
+                 ignicion_fija_x=None, ignicion_fija_y=None):
     
-    """Implementa el algoritmo genético para estimar los parámetros del modelo de incendio."""
-        
-    resultados_dir = f'resultados'
-    os.makedirs(resultados_dir, exist_ok=True)
-
-    # Si hay una población preentrenada la carga, sino se genera una nueva población inicial
-    if archivo_preentrenado:
-        poblacion = cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros,
-                                                   ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
-    else: # Instancio la población inicial
-        poblacion = Population.initial_population(tamano_poblacion, limite_parametros)
-        poblacion = procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_parametros, ctx,
-                                              num_steps=num_steps, batch_size=batch_size, 
-                                              ajustar_beta_gamma=ajustar_beta_gamma, 
-                                              beta_fijo=beta_fijo, gamma_fijo=gamma_fijo, ajustar_ignicion=ajustar_ignicion,
-                                              ignicion_fija_x=ignicion_fija_x, ignicion_fija_y=ignicion_fija_y)
- 
-    mutation_rate = 0.3 * 0.99**generacion_preentrenada
-
-    # Impresión después de calcular fitness
-    for individuo in poblacion.individuals:
-        print(individuo.as_dict())
-
-    guardar_resultados(poblacion, resultados_dir, -1+generacion_preentrenada, 
-                       ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
-    print(f'Generación 0: Mejor fitness = {min(poblacion.individuals, key=lambda x: x.fitness).fitness}')
-
-    for gen in range(generaciones):
-        print(f'Iniciando generación {gen+1}...')
-        new_population = []
-        elite = min(poblacion.individuals, key=lambda x: x.fitness)
-
-        # Instancio los operadores genéticos
-        selection_op, crossover_op, mutation_op = TournamentSelection(), OnePointCrossover(), GaussianMutation()
-
-        for _ in range(tamano_poblacion // 2):
-            parent1 = selection_op.select(poblacion)
-            parent2 = selection_op.select(poblacion)
-            child1, child2 = crossover_op.apply(parent1, parent2)
-            child1 = mutation_op.mutate(child1, mutation_rate, limite_parametros)
-            child2 = mutation_op.mutate(child2, mutation_rate, limite_parametros)
-            new_population.extend([child1, child2])
-
-        population = Population(new_population, generation=gen+1)
-
-        print(f"Procesando generación {gen+1} en batch...")
-        poblacion = procesar_poblacion_batch(population, ruta_incendio_referencia, limite_parametros, ctx,
-                                              num_steps=num_steps, batch_size=batch_size,
-                                              ajustar_beta_gamma=ajustar_beta_gamma, 
-                                              beta_fijo=beta_fijo, gamma_fijo=gamma_fijo, ajustar_ignicion=ajustar_ignicion,
-                                              ignicion_fija_x=ignicion_fija_x, ignicion_fija_y=ignicion_fija_y)
-
-        # Aplicar elitismo: reemplazar peor individuo con elite clonada
-        peor = poblacion.worst()
-        elite_clonada = elite.clone()
-        peor_idx = poblacion.individuals.index(peor)
-        poblacion.individuals[peor_idx] = elite_clonada
-
-        best_fitness = poblacion.best().fitness
-        print(f'Generación {gen+1}: Mejor fitness = {best_fitness}')
-
-        mutation_rate *= 0.99
-
-        # Impresión después de cada generación
-        for i, individuo in enumerate(poblacion.individuals, 1):
-            print(f'Individuo {i}: {individuo.as_dict()}')
-
-        guardar_resultados(poblacion, resultados_dir, gen+generacion_preentrenada, 
-                           ajustar_beta_gamma=ajustar_beta_gamma, ajustar_ignicion=ajustar_ignicion)
-
-    print(f'Resultados guardados en: {resultados_dir}')
-
-    return poblacion
+    ga = GeneticAlgorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, ctx,
+                 archivo_preentrenado, generacion_preentrenada, num_steps, batch_size,
+                 ajustar_beta_gamma, beta_fijo, gamma_fijo, ajustar_ignicion,
+                 ignicion_fija_x, ignicion_fija_y)
+    
+    return ga.run()
