@@ -45,7 +45,7 @@ class FitnessEvaluator:
         gammas[mask] = 0.9 * betas[mask]
         return betas, gammas
     
-    def create_fuel_map(self, parametros_batch, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
+    def _create_fuel_map(self, parametros_batch, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
         """
         Crea mapas de beta y gamma personalizados para cada simulación en el batch
         basados en los parámetros optimizados y el tipo de vegetación.
@@ -163,7 +163,7 @@ class FitnessEvaluator:
         R_new_batch = cp.empty_like(R_batch)
     
         # Crear mapas de parámetros de vegetación personalizados
-        beta_batch, gamma_batch = self.create_fuel_map(parametros_batch, ajustar_beta_gamma=ajustar_beta_gamma,
+        beta_batch, gamma_batch = self._create_fuel_map(parametros_batch, ajustar_beta_gamma=ajustar_beta_gamma,
                                                            beta_fijo=beta_fijo, gamma_fijo=gamma_fijo)
 
         # Crear arrays de parámetros D, A, B para cada simulación
