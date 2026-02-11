@@ -69,6 +69,43 @@ def procesar_poblacion_batch(poblacion, ruta_incendio_referencia, limite_paramet
 
     return poblacion
 
+class GeneticAlgorithm:
+    def __init__(self, tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, ctx,
+                 archivo_preentrenado = None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
+                 ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True,
+                 ignicion_fija_x=None, ignicion_fija_y=None):
+        
+        self.tamano_poblacion = tamano_poblacion
+        self.generaciones = generaciones
+        self.limite_parametros = limite_parametros
+        self.ruta_incendio_referencia = ruta_incendio_referencia
+        self.ctx = ctx
+        self.archivo_preentrenado = archivo_preentrenado
+        self.generacion_preentrenada = generacion_preentrenada
+        self.num_steps = num_steps
+        self.batch_size = batch_size
+        self.ajustar_beta_gamma=ajustar_beta_gamma
+        self.beta_fijo=beta_fijo
+        self.gamma_fijo=gamma_fijo
+        self.ajustar_ignicion=ajustar_ignicion
+        self.ignicion_fija_x=ignicion_fija_x
+        self.ignicion_fija_y=ignicion_fija_y
+    
+    def initialize(self):
+        # Si hay una población preentrenada la carga, sino se genera una nueva población inicial
+        if self.archivo_preentrenado:
+            poblacion = cargar_poblacion_preentrenada(self.archivo_preentrenado, self.tamano_poblacion, self.limite_parametros,
+                                                       ajustar_beta_gamma=self.ajustar_beta_gamma, ajustar_ignicion=self.ajustar_ignicion)
+        else: # Instancio la población inicial
+            poblacion = Population.initial_population(self.tamano_poblacion, self.limite_parametros)
+            poblacion = procesar_poblacion_batch(poblacion, self.ruta_incendio_referencia, self.limite_parametros, self.ctx,
+                                                num_steps=self.num_steps, batch_size=self.batch_size, 
+                                                ajustar_beta_gamma=self.ajustar_beta_gamma, 
+                                                beta_fijo=self.beta_fijo, gamma_fijo=self.gamma_fijo, ajustar_ignicion=self.ajustar_ignicion,
+                                                ignicion_fija_x=self.ignicion_fija_x, ignicion_fija_y=self.ignicion_fija_y)
+
+        return poblacion
+
 ############################## ALGORITMO GENÉTICO #########################################################
 
 def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, ctx,
