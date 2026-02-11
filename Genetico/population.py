@@ -31,6 +31,9 @@ class Population:
 
         return cls(individuals, generation=0)
     
+    def __len__(self):
+        return len(self.individuals)
+    
     def best(self):
         return min([ind for ind in self.individuals if ind.fitness is not None], key=lambda ind: ind.fitness)
     

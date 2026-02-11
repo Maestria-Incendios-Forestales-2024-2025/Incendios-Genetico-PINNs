@@ -12,6 +12,9 @@ class Individual:
     def invalidate_fitness(self):
         self.fitness = None
     
+    def update_fitness(self, new_fitness):
+        self.fitness = new_fitness
+    
     def __len__(self):
         return len(self.genes)
     

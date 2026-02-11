@@ -151,12 +151,11 @@ class FitnessEvaluator:
             # Extraer coordenadas (D, A, B, x, y, ...)
             if ajustar_ignicion:
                 x, y = int(params[3]), int(params[4])
-                S_batch[i, y, x] = 0
-                I_batch[i, y, x] = 1
             else: 
                 x, y = ignicion_fija_x, ignicion_fija_y
-                S_batch[i, y, x] = 0
-                I_batch[i, y, x] = 1
+            
+            S_batch[i, y, x] = 0
+            I_batch[i, y, x] = 1
 
         # Arrays para los nuevos estados
         S_new_batch = cp.empty_like(S_batch)
