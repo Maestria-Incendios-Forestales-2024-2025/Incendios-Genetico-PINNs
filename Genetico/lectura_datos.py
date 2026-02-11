@@ -1,12 +1,7 @@
 import numpy as np # type: ignore
 import cupy as cp # type: ignore
 import csv, os
-from operadores_geneticos import poblacion_inicial
-import sys
-
-# Agrega el directorio padre al path para importar módulos
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from mapas.io_mapas import ruta_mapas
+from population import Population
 
 ############################## LEER MAPAS RASTER ###############################################
 
@@ -33,7 +28,8 @@ def leer_incendio_referencia(ruta):
     
 ############################## CARGA DE ARCHIVO PREENTRENADO ###############################################
 
-def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros, n_betas=5, n_gammas=5,
+def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite_parametros, 
+                                  n_betas=5, n_gammas=5,
                                   ajustar_beta_gamma=True, ajustar_ignicion=True):
     """
     Carga una población preentrenada desde un CSV con columnas:
@@ -47,8 +43,7 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
     print(f"[DEBUG] Cargando población preentrenada desde: {archivo_preentrenado}")
 
     if not os.path.exists(archivo_preentrenado):
-        print(f"[DEBUG] Archivo {archivo_preentrenado} no encontrado. Generando población inicial.")
-        return poblacion_inicial(tamano_poblacion, limite_parametros)
+        raise ValueError(f"[DEBUG] Archivo {archivo_preentrenado} no encontrado.")
 
     poblacion_cargada = []
     with open(archivo_preentrenado, 'r') as f:
@@ -63,12 +58,12 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
                 if ajustar_ignicion:
                     x = int(float(row['x'])); y = int(float(row['y']))
 
-                if ajustar_beta_gamma and 'beta_1' in row:
+                if ajustar_beta_gamma and 'beta_1' in row: # Exp3
                     betas = cp.array([float(row[f'beta_{i}']) for i in range(1, n_betas+1)],
                                       dtype=cp.float32)
                     gammas = cp.array([float(row[f'gamma_{i}']) for i in range(1, n_gammas+1)],
                                        dtype=cp.float32)
-                elif ajustar_beta_gamma and 'beta' in row:
+                elif ajustar_beta_gamma and 'beta' in row: # Exp2
                     betas = cp.array(float(row['beta']), dtype=cp.float32)
                     gammas = cp.array(float(row['gamma']), dtype=cp.float32)
 
@@ -114,8 +109,7 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
     print(f"\n[DEBUG] Total individuos cargados: {num_cargados}")
 
     if num_cargados == 0:
-        print("[DEBUG] No se cargaron individuos válidos. Generando población inicial.")
-        return poblacion_inicial(tamano_poblacion, limite_parametros)
+        raise ValueError("[DEBUG] No se cargaron individuos válidos.")
 
     if num_cargados > tamano_poblacion:
         print(f"[DEBUG] Se cargaron {num_cargados}, recortando a {tamano_poblacion}")
@@ -124,38 +118,20 @@ def cargar_poblacion_preentrenada(archivo_preentrenado, tamano_poblacion, limite
     elif num_cargados < tamano_poblacion:
         faltantes = tamano_poblacion - num_cargados
         print(f"[DEBUG] Faltan {faltantes} individuos. Generando población inicial para completar.")
-        nuevos = poblacion_inicial(faltantes, limite_parametros)
+        nuevos_pop = Population.initial_population(faltantes, limite_parametros)
 
         # Reformatear cada nuevo individuo con las mismas claves que los cargados
-        for ind in nuevos:
-            if ajustar_beta_gamma and ajustar_ignicion:  # Exp2
-                poblacion_cargada.append({
-                    "D": ind["D"], "A": ind["A"], "B": ind["B"],
-                    "x": ind["x"], "y": ind["y"],
-                    "betas": ind.get("betas", cp.zeros(n_betas, dtype=cp.float32)),
-                    "gammas": ind.get("gammas", cp.zeros(n_gammas, dtype=cp.float32)),
-                    "fitness": ind.get("fitness", None)
-                })
-            elif ajustar_beta_gamma and not ajustar_ignicion:  # Exp3
-                poblacion_cargada.append({
-                    "D": ind["D"], "A": ind["A"], "B": ind["B"],
-                    "betas": ind.get("betas", cp.zeros(n_betas, dtype=cp.float32)),
-                    "gammas": ind.get("gammas", cp.zeros(n_gammas, dtype=cp.float32)),
-                    "fitness": ind.get("fitness", None)
-                })
-            else:  # Exp1
-                poblacion_cargada.append({
-                    "D": ind["D"], "A": ind["A"], "B": ind["B"],
-                    "x": ind["x"], "y": ind["y"],
-                    "fitness": ind.get("fitness", None)
-                })
+        for ind in nuevos_pop.individuals:
+            ind_dict = ind.as_dict(ajustar_beta_gamma, ajustar_ignicion)
+            poblacion_cargada.append(ind_dict)
 
     print(f"[DEBUG] Población final: {len(poblacion_cargada)} individuos.")
-    return poblacion_cargada
+    return Population.from_results(poblacion_cargada, ajustar_beta_gamma, ajustar_ignicion)
 
 ############################## GUARDADO DE RESULTADOS ###############################################
 
-def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, ajustar_beta_gamma=True, ajustar_ignicion=True):
+def guardar_resultados(poblacion, resultados_dir, gen, n_betas=5, n_gammas=5, 
+                       ajustar_beta_gamma=True, ajustar_ignicion=True):
     """
     Guarda resultados en un archivo CSV.
     
@@ -187,7 +163,8 @@ def guardar_resultados(resultados, resultados_dir, gen, n_betas=5, n_gammas=5, a
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         
-        for resultado in resultados:
+        for individuo in poblacion.individuals:
+            resultado = individuo.as_dict(ajustar_beta_gamma, ajustar_ignicion)
             row = {
                 'D': resultado['D'],
                 'A': resultado['A'],
