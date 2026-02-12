@@ -7,9 +7,9 @@ from lectura_datos import leer_incendio_referencia
 
 class GeneticAlgorithm:
     def __init__(self, tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, ctx,
-                 archivo_preentrenado = None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
+                 archivo_preentrenado=None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
                  ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True,
-                 ignicion_fija_x=None, ignicion_fija_y=None):
+                 ignicion_fija_x=None, ignicion_fija_y=None, verbose=False):
         
         self.tamano_poblacion = tamano_poblacion
         self.generaciones = generaciones
@@ -26,6 +26,7 @@ class GeneticAlgorithm:
         self.ajustar_ignicion=ajustar_ignicion
         self.ignicion_fija_x=ignicion_fija_x
         self.ignicion_fija_y=ignicion_fija_y
+        self.verbose = verbose
 
         # Operadores
         self.selection_op = TournamentSelection()
@@ -44,7 +45,8 @@ class GeneticAlgorithm:
                 self.tamano_poblacion, 
                 self.limite_parametros,
                 ajustar_beta_gamma=self.ajustar_beta_gamma, 
-                ajustar_ignicion=self.ajustar_ignicion
+                ajustar_ignicion=self.ajustar_ignicion,
+                verbose=self.verbose
             )
         else: # Instancio la población inicial
             poblacion = Population.initial_population(self.tamano_poblacion, self.limite_parametros)
@@ -73,7 +75,7 @@ class GeneticAlgorithm:
         else: # Exp1
             for D, A, B, x, y in parametros_batch:
                 A, B = evaluator.validate_courant_and_adjust(A, B)
-                x, y = evaluator.validate_ignition_point(x, y, self.incendio_referencia)
+                x, y = evaluator.validate_ignition_point(x, y, self.incendio_referencia, self.limite_parametros)
                 params.append((D, A, B, x, y))
         
         return params
@@ -85,7 +87,8 @@ class GeneticAlgorithm:
         for i in range(0, len(poblacion), self.batch_size):
             # Accede a los individuos del batch
             batch = poblacion.individuals[i:i+self.batch_size]
-            print(f'Procesando batch {i//self.batch_size + 1} de {len(poblacion) // self.batch_size}...')
+            if self.verbose:
+                print(f'Procesando batch {i//self.batch_size + 1} de {len(poblacion) // self.batch_size}...')
             # Accede a los parámetros de los individuos del batch
             parametros_batch = [individuo.genes for individuo in batch]
 
@@ -137,33 +140,37 @@ class GeneticAlgorithm:
         mutation_rate = 0.3 * 0.99**self.generacion_preentrenada
 
         for gen in range(self.generaciones + 1):
-            if gen > 0:
+            if gen > 0 and self.verbose:
                 print(f"Iniciando generación {gen}...")
                 poblacion = self.step(poblacion, mutation_rate, gen)
                 mutation_rate *= 0.99
             
-            print(f"Generación {gen}: Mejor fitness = {poblacion.best().fitness}")
+            if self.verbose:
+                print(f"Generación {gen}: Mejor fitness = {poblacion.best().fitness}")
 
-            for i, ind in enumerate(poblacion.individuals, 1):
-                print(f"Individuo {i}: {ind.as_dict(self.ajustar_beta_gamma, self.ajustar_ignicion)}")
+            if self.verbose:
+                for i, ind in enumerate(poblacion.individuals, 1):
+                    print(f"Individuo {i}: {ind.as_dict(self.ajustar_beta_gamma, self.ajustar_ignicion)}")
             
-            Population.guardar_resultados(resultados_dir, gen - 1 + self.generacion_preentrenada,
+            poblacion.guardar_resultados(resultados_dir, gen - 1 + self.generacion_preentrenada,
                                ajustar_beta_gamma=self.ajustar_beta_gamma, 
-                               ajustar_ignicion=self.ajustar_ignicion)
+                               ajustar_ignicion=self.ajustar_ignicion,
+                               verbose=self.verbose)
             
-        print(f"Resultados guardados en: {resultados_dir}")
+        if self.verbose:
+            print(f"Resultados guardados en: {resultados_dir}")
         return poblacion
 
 ############################## ALGORITMO GENÉTICO #########################################################
 
 def genetic_algorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, ctx,
-                 archivo_preentrenado = None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
+                 archivo_preentrenado=None, generacion_preentrenada=0, num_steps=10000, batch_size=10,
                  ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None, ajustar_ignicion=True,
-                 ignicion_fija_x=None, ignicion_fija_y=None):
+                 ignicion_fija_x=None, ignicion_fija_y=None, verbose=False):
     
     ga = GeneticAlgorithm(tamano_poblacion, generaciones, limite_parametros, ruta_incendio_referencia, ctx,
                  archivo_preentrenado, generacion_preentrenada, num_steps, batch_size,
                  ajustar_beta_gamma, beta_fijo, gamma_fijo, ajustar_ignicion,
-                 ignicion_fija_x, ignicion_fija_y)
+                 ignicion_fija_x, ignicion_fija_y, verbose)
     
     return ga.run()

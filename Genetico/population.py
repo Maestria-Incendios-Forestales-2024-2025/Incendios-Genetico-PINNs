@@ -68,11 +68,11 @@ class Population:
             if ajustar_beta_gamma and ajustar_ignicion: # Exp2
                 x, y = res['x'], res['y']
                 betas, gammas = res['betas'], res['gammas']
-                genes = cp.array([D, A, B, betas, gammas, x, y])
+                genes = cp.array([D, A, B, x, y, betas, gammas])
             
             elif ajustar_beta_gamma and not ajustar_ignicion: # Exp3
                 betas, gammas = res['betas'], res['gammas']
-                genes = cp.array([D, A, B, betas, gammas])
+                genes = cp.concatenate([cp.array([D, A, B]), betas, gammas])
         
             else: # Exp1
                 x, y = res['x'], res['y']
@@ -82,13 +82,15 @@ class Population:
 
         return cls(individuals)
     
-    @staticmethod
-    def cargar_poblacion_preentrenada(self, archivo_preentrenado, tamano_poblacion, limite_parametros, 
+    @classmethod
+    def cargar_poblacion_preentrenada(cls, archivo_preentrenado, tamano_poblacion, limite_parametros, 
                                   n_betas=5, n_gammas=5,
-                                  ajustar_beta_gamma=True, ajustar_ignicion=True):
+                                  ajustar_beta_gamma=True, ajustar_ignicion=True,
+                                  verbose=False):
         """Carga una población preentrenada desde un CSV"""
 
-        print(f"[DEBUG] Cargando población preentrenada desde: {archivo_preentrenado}")
+        if verbose:
+            print(f"[DEBUG] Cargando población preentrenada desde: {archivo_preentrenado}")
 
         if not os.path.exists(archivo_preentrenado):
             raise ValueError(f"[DEBUG] Archivo {archivo_preentrenado} no encontrado.")
@@ -124,7 +126,7 @@ class Population:
                             "betas": betas, "gammas": gammas, "fitness": fitness
                         })
                         # Prints de debug solo en casos selectos
-                        if idx <= 3 or idx == total_rows // 2 or idx == total_rows:
+                        if verbose and (idx <= 3 or idx == total_rows // 2 or idx == total_rows):
                             print(f"[DEBUG] Fila {idx}/{total_rows}: "
                                 f"D={D}, A={A}, B={B}, x={x}, y={y}, "
                                 f"betas={betas.get()}, gammas={gammas.get()}, fitness={fitness}")
@@ -134,7 +136,7 @@ class Population:
                             "betas": betas, "gammas": gammas, "fitness": fitness
                         })
                         # Prints de debug solo en casos selectos
-                        if idx <= 3 or idx == total_rows // 2 or idx == total_rows:
+                        if verbose and (idx <= 3 or idx == total_rows // 2 or idx == total_rows):
                             print(f"[DEBUG] Fila {idx}/{total_rows}: "
                                 f"D={D}, A={A}, B={B}, "
                                 f"betas={betas.get()}, gammas={gammas.get()}, fitness={fitness}")
@@ -143,42 +145,46 @@ class Population:
                             "D": D, "A": A, "B": B, "x": x, "y": y, "fitness": fitness 
                         })
                         # Prints de debug solo en casos selectos
-                        if idx <= 3 or idx == total_rows // 2 or idx == total_rows:
+                        if verbose and (idx <= 3 or idx == total_rows // 2 or idx == total_rows):
                             print(f"[DEBUG] Fila {idx}/{total_rows}: "
                                 f"D={D}, A={A}, B={B}, x={x}, y={y}, fitness={fitness}")
 
                 except (ValueError, KeyError) as e:
-                    if idx <= 5:  # solo aviso explícito en las primeras filas
+                    if verbose and idx <= 5:  # solo aviso explícito en las primeras filas
                         print(f"[WARNING] Fila inválida {idx}, se salta. Error: {e}")
                     continue
 
         # Ajustar tamaño de la población
         num_cargados = len(poblacion_cargada)
-        print(f"\n[DEBUG] Total individuos cargados: {num_cargados}")
+        if verbose:
+            print(f"\n[DEBUG] Total individuos cargados: {num_cargados}")
 
         if num_cargados == 0:
             raise ValueError("[DEBUG] No se cargaron individuos válidos.")
 
         if num_cargados > tamano_poblacion:
-            print(f"[DEBUG] Se cargaron {num_cargados}, recortando a {tamano_poblacion}")
+            if verbose:
+                print(f"[DEBUG] Se cargaron {num_cargados}, recortando a {tamano_poblacion}")
             indices = cp.random.choice(num_cargados, tamano_poblacion, replace=False)
             poblacion_cargada = [poblacion_cargada[i] for i in indices.get()]
         elif num_cargados < tamano_poblacion:
             faltantes = tamano_poblacion - num_cargados
-            print(f"[DEBUG] Faltan {faltantes} individuos. Generando población inicial para completar.")
-            nuevos_pop = self.initial_population(faltantes, limite_parametros)
+            if verbose:
+                print(f"[DEBUG] Faltan {faltantes} individuos. Generando población inicial para completar.")
+            nuevos_pop = cls.initial_population(faltantes, limite_parametros)
 
             # Reformatear cada nuevo individuo con las mismas claves que los cargados
             for ind in nuevos_pop.individuals:
                 ind_dict = ind.as_dict(ajustar_beta_gamma, ajustar_ignicion)
                 poblacion_cargada.append(ind_dict)
 
-        print(f"[DEBUG] Población final: {len(poblacion_cargada)} individuos.")
-        return self.from_results(poblacion_cargada, ajustar_beta_gamma, ajustar_ignicion)
+        if verbose:
+            print(f"[DEBUG] Población final: {len(poblacion_cargada)} individuos.")
+        return cls.from_results(poblacion_cargada, ajustar_beta_gamma, ajustar_ignicion)
 
-    @staticmethod
     def guardar_resultados(self, resultados_dir, gen, n_betas=5, n_gammas=5, 
-                       ajustar_beta_gamma=True, ajustar_ignicion=True):
+                       ajustar_beta_gamma=True, ajustar_ignicion=True,
+                       verbose=False):
         """Guarda resultados en un archivo CSV"""
     
         csv_filename = os.path.join(resultados_dir, f'resultados_generacion_{gen+1}.csv')
@@ -236,4 +242,5 @@ class Population:
                         row['gamma'] = float(gammas)
                 writer.writerow(row)
     
-        print(f"✅ Resultados guardados en {csv_filename}")
+        if verbose:
+            print(f"✅ Resultados guardados en {csv_filename}")

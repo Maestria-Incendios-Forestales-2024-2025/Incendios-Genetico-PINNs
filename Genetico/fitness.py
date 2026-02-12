@@ -79,12 +79,13 @@ class FitnessEvaluator:
             if ajustar_beta_gamma and len(params) == 7: # Exp2
                 beta_map = cp.full_like(vegetacion, params[5], dtype=cp.float32)
                 gamma_map = cp.full_like(vegetacion, params[6], dtype=cp.float32)
-            elif ajustar_beta_gamma and len(params) == 5: # Exp3
-                beta_params, gamma_params = params[3], params[4]
-            else: 
-                beta_params, gamma_params = beta_fijo, gamma_fijo
+            else:
+                if ajustar_beta_gamma and len(params) == 5: # Exp3
+                    beta_params, gamma_params = params[3], params[4]
+                else:   # Exp1
+                    beta_params, gamma_params = beta_fijo, gamma_fijo
             
-            beta_map, gamma_map = self._apply_veg_mapping(vegetacion, beta_params, gamma_params, veg_types)
+                beta_map, gamma_map = self._apply_veg_mapping(vegetacion, beta_params, gamma_params, veg_types)
         
             beta_batch[i] = beta_map
             gamma_batch[i] = gamma_map
