@@ -31,6 +31,11 @@ class GeneticAlgorithm:
         self.selection_op = TournamentSelection()
         self.crossover_op = OnePointCrossover()
         self.mutation_op = GaussianMutation()
+
+        self.evaluator = FitnessEvaluator(self.ctx)
+
+        self.incendio_referencia = leer_incendio_referencia(self.ruta_incendio_referencia)
+        self.celdas_quemadas_referencia = cp.where(self.incendio_referencia > 0.001, 1, 0)
     
     def initialize(self):
         if self.archivo_preentrenado: # Si hay una población preentrenada la carga
@@ -47,13 +52,34 @@ class GeneticAlgorithm:
         
         return poblacion
     
+    def _validate_and_extract_params(self, parametros_batch):
+        evaluator = self.evaluator
+        params = []
+
+        if self.ajustar_beta_gamma and self.ajustar_ignicion: # Exp2
+            for D, A, B, x, y, betas, gammas in parametros_batch:
+                A, B = evaluator.validate_courant_and_adjust(A, B)
+                x, y = evaluator.validate_ignition_point(x, y, self.incendio_referencia, self.limite_parametros)
+                betas, gammas = evaluator.validate_beta_gamma(betas, gammas)
+                params.append((D, A, B, x, y, betas, gammas))
+        elif self.ajustar_beta_gamma and not self.ajustar_ignicion: # Exp3
+            for genes in parametros_batch:
+                D, A, B = genes[0], genes[1], genes[2]
+                betas = genes[3:8]
+                gammas = genes[8:13]
+                A, B = evaluator.validate_courant_and_adjust(A, B)
+                betas, gammas = evaluator.validate_beta_gamma(betas, gammas)
+                params.append((D, A, B, betas, gammas))
+        else: # Exp1
+            for D, A, B, x, y in parametros_batch:
+                A, B = evaluator.validate_courant_and_adjust(A, B)
+                x, y = evaluator.validate_ignition_point(x, y, self.incendio_referencia)
+                params.append((D, A, B, x, y))
+        
+        return params
+    
     def evaluate_population(self, poblacion):
         """Procesa una población en batches para aprovechar el paralelismo"""  
-        evaluator = FitnessEvaluator(self.ctx)
-
-        incendio_referencia = leer_incendio_referencia(self.ruta_incendio_referencia)
-        celdas_quemadas_referencia = cp.where(incendio_referencia > 0.001, 1, 0)
-
         population_fitness = []
 
         for i in range(0, len(poblacion), self.batch_size):
@@ -64,29 +90,10 @@ class GeneticAlgorithm:
             parametros_batch = [individuo.genes for individuo in batch]
 
             # Validación de parámetros
-            parametros_validados = []
-            if self.ajustar_beta_gamma and self.ajustar_ignicion:             # Exp2
-                for D, A, B, x, y, betas, gammas in parametros_batch:
-                    A, B = evaluator.validate_courant_and_adjust(A, B)
-                    x, y = evaluator.validate_ignition_point(x, y, incendio_referencia, self.limite_parametros)
-                    betas, gammas = evaluator.validate_beta_gamma(betas, gammas)
-                    parametros_validados.append((D, A, B, x, y, betas, gammas))
-            elif self.ajustar_beta_gamma and not self.ajustar_ignicion:       # Exp3 
-                for genes in parametros_batch:
-                    D, A, B = genes[0], genes[1], genes[2]
-                    betas = genes[3:8]   # índices 3, 4, 5, 6, 7
-                    gammas = genes[8:13] # índices 8, 9, 10, 11, 12
-                    A, B = evaluator.validate_courant_and_adjust(A, B)
-                    betas, gammas = evaluator.validate_beta_gamma(betas, gammas)
-                    parametros_validados.append((D, A, B, betas, gammas))
-            else:                                                   # Exp1
-                for D, A, B, x, y in parametros_batch:
-                    A, B = evaluator.validate_courant_and_adjust(A, B)
-                    x, y = evaluator.validate_ignition_point(x, y, incendio_referencia, self.limite_parametros)
-                    parametros_validados.append((D, A, B, x, y))
+            parametros_validados = self._validate_and_extract_params(parametros_batch)
 
             # Lista de valores de fitness 
-            fitness_values = evaluator.evaluate_batch(parametros_validados, celdas_quemadas_referencia, self.num_steps, 
+            fitness_values = self.evaluator.evaluate_batch(parametros_validados, self.celdas_quemadas_referencia, self.num_steps, 
                                        ajustar_beta_gamma=self.ajustar_beta_gamma, beta_fijo=self.beta_fijo, gamma_fijo=self.gamma_fijo, 
                                        ajustar_ignicion=self.ajustar_ignicion, ignicion_fija_x=self.ignicion_fija_x, 
                                        ignicion_fija_y=self.ignicion_fija_y)
