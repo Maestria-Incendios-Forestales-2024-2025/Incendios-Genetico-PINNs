@@ -45,18 +45,21 @@ class FitnessEvaluator:
         gammas[mask] = 0.9 * betas[mask]
         return betas, gammas
     
+    def _apply_veg_mapping(self, vegetacion, beta_params, gamma_params, veg_types):
+        beta_map = cp.zeros_like(vegetacion, dtype=cp.float32)
+        gamma_map = cp.zeros_like(vegetacion, dtype=cp.float32)
+
+        for j, veg_type in enumerate(veg_types):
+            mask = (vegetacion == int(veg_type))
+            if j < len(beta_params) and j < len(gamma_params):
+                beta_map = cp.where(mask, beta_params[j], beta_map)
+                gamma_map = cp.where(mask, gamma_params[j], gamma_map)
+
+        return beta_map, gamma_map
+    
     def _create_fuel_map(self, parametros_batch, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None):
-        """
-        Crea mapas de beta y gamma personalizados para cada simulación en el batch
-        basados en los parámetros optimizados y el tipo de vegetación.
-    
-        Args:
-            parametros_batch: Lista de tuplas (D, A, B, x, y, beta_params, gamma_params)
-            vegetacion: Mapa de tipos de vegetación (ny, nx)
-    
-        Returns:
-            beta_batch, gamma_batch: Arrays (batch_size, ny, nx) con valores mapeados
-        """
+        """Crea mapas de beta y gamma personalizados para cada simulación en el batch
+        basados en los parámetros optimizados y el tipo de vegetación."""
         batch_size = len(parametros_batch)
         vegetacion = self.ctx.vegetacion
         ny, nx = self.ctx.ny, self.ctx.nx
@@ -74,38 +77,14 @@ class FitnessEvaluator:
             beta_map = cp.zeros_like(vegetacion, dtype=cp.float32)
             gamma_map = cp.zeros_like(vegetacion, dtype=cp.float32)
             if ajustar_beta_gamma and len(params) == 7: # Exp2
-                beta_val = params[5]  # un solo valor escalar
-                gamma_val = params[6]  # un solo valor escalar
-                beta_map = cp.full_like(vegetacion, beta_val, dtype=cp.float32)
-                gamma_map = cp.full_like(vegetacion, gamma_val, dtype=cp.float32)
+                beta_map = cp.full_like(vegetacion, params[5], dtype=cp.float32)
+                gamma_map = cp.full_like(vegetacion, params[6], dtype=cp.float32)
             elif ajustar_beta_gamma and len(params) == 5: # Exp3
-                beta_params = params[3]  # Lista de betas por tipo de vegetación
-                gamma_params = params[4]  # Lista de gammas por tipo de vegetación
-            
-                # Mapear valores según tipo de vegetación
-                for j, veg_type in enumerate(veg_types):
-                    veg_type = int(veg_type)
-                    # Crear máscara para este tipo de vegetación
-                    mask = (vegetacion == veg_type)
-                
-                    # Asignar valores si tenemos parámetros para este tipo
-                    if j < len(beta_params) and j < len(gamma_params):
-                        beta_map = cp.where(mask, beta_params[j], beta_map)
-                        gamma_map = cp.where(mask, gamma_params[j], gamma_map)
+                beta_params, gamma_params = params[3], params[4]
             else: 
-                beta_params = beta_fijo  # Lista de betas por tipo de vegetación
-                gamma_params = gamma_fijo  # Lista de gammas por tipo de vegetación
+                beta_params, gamma_params = beta_fijo, gamma_fijo
             
-                # Mapear valores según tipo de vegetación
-                for j, veg_type in enumerate(veg_types):
-                    veg_type = int(veg_type)
-                    # Crear máscara para este tipo de vegetación
-                    mask = (vegetacion == veg_type)
-                
-                    # Asignar valores si tenemos parámetros para este tipo
-                    if j < len(beta_params) and j < len(gamma_params):
-                        beta_map = cp.where(mask, beta_params[j], beta_map)
-                        gamma_map = cp.where(mask, gamma_params[j], gamma_map)
+            beta_map, gamma_map = self._apply_veg_mapping(vegetacion, beta_params, gamma_params, veg_types)
         
             beta_batch[i] = beta_map
             gamma_batch[i] = gamma_map
@@ -120,17 +99,8 @@ class FitnessEvaluator:
     
     def evaluate_batch(self, parametros_batch, burnt_cells, num_steps=10000, ajustar_beta_gamma=True, beta_fijo=None, gamma_fijo=None,
                   ajustar_ignicion=True, ignicion_fija_x=None, ignicion_fija_y=None):
-        """
-        Calcula el fitness para múltiples combinaciones de parámetros en paralelo.
+        """Calcula el fitness para múltiples combinaciones de parámetros en paralelo."""
     
-        Args:
-            parametros_batch: Lista de tuplas (D, A, B, x, y, beta_params, gamma_params)
-    
-        Returns:
-            Lista de valores de fitness
-        """
-    
-        # Resto del código original...
         batch_size = len(parametros_batch)
         vegetacion = self.ctx.vegetacion
         wx = self.ctx.wx
